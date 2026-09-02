@@ -1,0 +1,1 @@
+# mini-ideathon-smart-ecosystem-team-A
