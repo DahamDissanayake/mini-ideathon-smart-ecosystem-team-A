@@ -98,7 +98,7 @@ is assembled. Every portal access is logged with who, what, and when.
 |---|---|---|
 | Transport | BLE 5.0, connection-oriented | Low power, dense device support, mature stack |
 | Pairing | LE Secure Connections with bonding | ECDH key agreement, resists passive eavesdropping |
-| Key storage | ESP32-S3 secure element, per-device keys | No shared secrets. Compromising one band compromises one band. |
+| Key storage | ESP32C3 eFuse, per-device keys, not readable by application firmware | No shared secrets. Compromising one band compromises one band. |
 | Identity | Resolvable Private Addresses, rotating | A parked attacker cannot track a specific child by MAC address |
 | Payload | AES-128-CCM at link layer | Standard BLE encryption, plus application-layer signing below |
 | Integrity | HMAC over each packet with a per-device key | Gateway rejects any packet it cannot authenticate |
@@ -152,7 +152,7 @@ Stated plainly, because a threat model that claims completeness is not credible.
   and not specified here.
 - **Compromised firmware on a band.** A band running attacker firmware holds a
   valid per-device key and can sign plausible windows. Signed firmware and
-  secure boot on the ESP32-S3 are assumed and not specified here.
+  secure boot on the ESP32C3 are assumed and not specified here.
 - **The deletion mechanism.** "Deletion is verifiable" is asserted above. How it
   is verified is question 5.3 in `../OPEN-QUESTIONS.md`.
 - **Badge attribution.** See section 1.

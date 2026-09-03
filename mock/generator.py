@@ -73,8 +73,8 @@ SCHEMA_VERSION = "1.0"
 FW_VERSION = "0.4.1"
 MODEL_VERSION = "act-cls-1.2"
 
-# Demo key only. Real deployments hold a per-device key in the ESP32-S3 secure
-# element and never in a source file.
+# Demo key only. Real deployments hold a per-device key in ESP32C3 eFuse,
+# never in a source file.
 DEMO_KEY = b"letgo-band-mock-generator-not-a-real-key"
 
 # Placeholder activity vocabulary. The real list comes with the labelled

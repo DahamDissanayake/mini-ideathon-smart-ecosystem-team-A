@@ -19,9 +19,11 @@ Daycare centres track attendance on paper and supervise children by line of
 sight. Staff-to-child ratios mean no adult can watch every child continuously,
 and parents get no record of their child's day beyond a verbal handover.
 
-LetGo Band is a child-worn activity band with a tamper-evident strap, connected
-to a facility edge gateway that runs the entire agent workflow locally. Raw
-motion data never leaves the building. Only encrypted, minimised summaries reach
+LetGo Band is a child-worn activity band with a tamper-evident strap. The band
+broadcasts and never connects to anything. Mains-powered scanner anchors, one
+per zone, hear those broadcasts and forward them to a facility edge gateway that
+runs the entire agent workflow locally. Raw motion data never leaves the
+building. Only encrypted, minimised summaries reach
 the cloud, where parents view their child's day through a scoped portal. The
 system automates attendance, detects safety anomalies in seconds, and produces
 an activity record that today does not exist.
@@ -74,16 +76,23 @@ performance data at all.
 graph LR
     subgraph FACILITY["DAYCARE FACILITY"]
         direction LR
-        N1["LetGo Band 01<br/>ESP32-S3 + IMU<br/>strap loop"]
+        N1["LetGo Band 01<br/>XIAO ESP32C3 + IMU<br/>strap loop"]
         N2["LetGo Band 02"]
         N3["LetGo Band N"]
-        GW["EDGE GATEWAY<br/>Raspberry Pi 5<br/>ALL AGENTS RUN HERE"]
+        A1["ANCHOR, room zone<br/>ESP32-WROOM-32<br/>mains powered"]
+        A2["ANCHOR, room zone"]
+        A3["ANCHOR, perimeter"]
+        GW["EDGE GATEWAY<br/>Raspberry Pi 5<br/>ZONE RESOLVER<br/>ALL AGENTS RUN HERE"]
         CLIP["Teacher clip tool<br/>physical access control"]
         STAFF["Staff console<br/>local web UI"]
 
-        N1 -->|BLE 5.0 bonded| GW
-        N2 -->|BLE 5.0 bonded| GW
-        N3 -->|BLE 5.0 bonded| GW
+        N1 -.->|BLE advertisement| A1
+        N1 -.->|same advertisement| A2
+        N2 -.->|BLE advertisement| A2
+        N3 -.->|BLE advertisement| A3
+        A1 -->|WiFi, ESP-NOW fallback| GW
+        A2 -->|WiFi| GW
+        A3 -->|WiFi| GW
         CLIP -.->|clip / release| N1
         GW --> STAFF
     end
@@ -107,10 +116,16 @@ The most important line on this diagram is the one leaving the building.
 Everything to its left is raw data, everything to its right is a summary, and
 the agents sit on the left.
 
+Note that band 01 is heard by two anchors at once. That is not redundancy, it is
+how zone detection works. A broadcast costs the band the same whether one
+listener hears it or four, and comparing the signal strength across anchors is
+what tells us which room the child is in.
+
 | Tier       | Where        | What runs here                                                                                                                                       | Why here                                                                                                                                     |
 | ---------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tier 0** | Band         | Sampling, filtering, strap circuit monitoring, step and motion segmentation, feature extraction, local buffer                                        | Must work with the gateway out of range. Strap events must be instant.                                                                       |
-| **Tier 1** | Edge gateway | Movement classification model, all five agents, the deterministic Safeguard, attendance reconciliation, staff console, local storage of raw features | Raw child motion must not leave the premises. Latency for safety alerts must be sub-second. The facility must keep working with no internet. |
+| **Tier 0** | Band         | Sampling, filtering, strap circuit monitoring, step and motion segmentation, feature extraction, local buffer                                        | Must work with no listener in range. Strap events must be instant.                                                                          |
+| **Tier 0.5** | Anchors    | Passive BLE scanning, signal strength measurement, forwarding to the gateway. No decoding, no decisions.                                             | One gateway covers 10 to 30 metres indoors through walls. A daycare is bigger. Adding listeners is the fix, not a stronger radio.            |
+| **Tier 1** | Edge gateway | Zone Resolver, movement classification model, all five agents, the deterministic Safeguard, attendance reconciliation, staff console, local storage of raw features | Raw child motion must not leave the premises. Latency for safety alerts must be sub-second. The facility must keep working with no internet. |
 | **Tier 2** | Cloud        | Parent portal, encrypted daily summaries, multi-site administration, long-horizon storage of summaries only                                          | Parents are off-site. Nothing here is safety-critical.                                                                                       |
 
 We run all agents on the gateway because that single decision solves three
@@ -120,6 +135,23 @@ because a safety alert cannot wait for a round trip to a data centre.
 
 **The rule we enforce everywhere:** no safety decision depends on Tier 2. If the
 internet fails, the facility loses the parent portal and loses nothing else.
+
+### Radio per tier
+
+The band advertises over BLE and never connects to anything. Broadcast has no
+concurrent-device ceiling, it is heard by every anchor in range at once, and a
+band that never associates holds no network credentials to steal. We rejected
+WiFi on the band on power alone: roughly 100 to 250 mA with the radio up against
+roughly 10 to 15 mA for BLE advertising, plus a multi-second association on
+every wake, which turns multi-day battery life into hours.
+
+Anchors use WiFi because they are on mains power, where radio cost does not
+matter. The full reasoning, including why we did not put ESP-NOW on the band, is
+in [`spec.md`](spec.md) section 8.
+
+The pattern across the three devices is deliberate: capability increases as
+power availability increases. The band is dumb because it runs on a battery. The
+gateway is smart because it has a wall socket.
 
 ---
 
@@ -131,31 +163,66 @@ Industrial design concept for the band. Nothing a child can press, and the strap
 is one continuous loop with the electronics moulded into it. This is a render
 rather than a photograph of a built unit.
 
-| Component             | Purpose                                                                      |
-| --------------------- | ---------------------------------------------------------------------------- |
-| ESP32-S3              | MCU, BLE 5.0, on-device feature extraction, secure element for key storage   |
-| 6-axis IMU            | Accelerometer and gyroscope for activity classification and wear-consistency |
-| Conductive strap loop | Continuous circuit through the band. Closed means worn.                      |
-| Safety clip           | Requires the teacher's tool for normal release                               |
-| Calibrated breakaway  | Mechanical separation at a specified force, typically 20 to 30 N             |
-| LiPo cell             | Multi-day operation, charged in a contactless dock                           |
-| No external buttons   | Nothing a child can press. Provisioning happens in the dock.                 |
+Battery powered, no buttons, broadcast only.
+
+| Component          | Part                                                       | Role                                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCU                | XIAO ESP32C3                                               | BLE 5.0 advertising, feature extraction, strap monitoring. Chosen because it is 21 x 17.5 mm with onboard LiPo charging, which most ESP32 boards lack.                                          |
+| IMU                | MPU6050 (prototype), BMI270 or LSM6DSOX (pilot)            | 6-axis motion. The upgrade matters: MPU6050 draws around 4 mA continuously, BMI270 runs under 20 µA in low-power motion mode. That is the difference between an 8 hour band and a 5 day band.   |
+| Battery            | 3.7 V LiPo, 120 to 150 mAh, JST-PH 1.25                    | Power                                                                                                                                                                                           |
+| Strap conductor    | Conductive thread or 34 AWG enamelled wire                 | Continuous loop through the strap                                                                                                                                                               |
+| Loop resistor      | 10 kΩ 1%                                                   | Sits inside the strap loop                                                                                                                                                                      |
+| Pull-up resistor   | 10 kΩ 1%                                                   | Forms the divider read by the ADC                                                                                                                                                               |
+| Fuel gauge (pilot) | MAX17048                                                   | Accurate battery percentage for the low-battery escalation                                                                                                                                      |
+| Strap              | Child-size silicone, 14 mm                                 | Body                                                                                                                                                                                            |
+| Enclosure          | 3D printed TPU or PLA                                      | Housing                                                                                                                                                                                         |
+| Breakaway clip     | Printed with a shear web (prototype), magnetic (production) | Emergency release                                                                                                                                                                               |
 
 ### The strap loop
 
-A conductive loop through the strap forms a closed circuit monitored by a GPIO
-pin. Closed means worn.
+This is the part that is actually novel, and it is four passive components.
 
-This is the piece of the design we care most about. Most wearables cannot
-distinguish "the person is still" from "the device came off," so they infer it
-from motion and get it wrong. We do not have to infer it. The circuit knows.
+A conductive loop runs through the strap with a 10 kΩ resistor inside it, read
+through a 10 kΩ pull-up on an ADC pin. The divider gives four distinguishable
+states from a single pin:
 
-Combined with the clip tool signal, two inputs separate four exit conditions:
+| Reading     | State                       |
+| ----------- | --------------------------- |
+| Mid voltage | Clipped, the band is worn   |
+| High        | Cut or breakaway            |
+| Low         | Shorted, someone is tampering |
+| Fluctuating | Fault                       |
+
+A plain GPIO gives two states and cannot tell the difference between a worn band
+and someone bridging the contacts to fake "worn". The 10 kΩ in the loop is what
+makes the difference: a bridge reads low, and only the real resistor reads mid.
+
+Everything is debounced by roughly 200 ms except tamper, which fires
+immediately. A short is not a mechanical event and does not need settling time.
+
+Most wearables cannot distinguish "the person is still" from "the device came
+off," so they infer it from motion and get it wrong. We do not have to infer it.
+The circuit knows.
+
+Combined with the clip tool signal, these inputs separate four exit conditions:
 released by staff tool, mechanical breakaway, cut, and intermittent fault. The
 last three are the strap breach class, which is the highest-priority message
 class in the system and bypasses normal batching. If the clip tool signal is
 absent or ambiguous when the circuit opens, we classify the event as a cut and
 escalate. The state machine is in [`spec.md`](spec.md).
+
+### Radio behaviour
+
+The band advertises and never connects during normal operation. No WiFi
+credentials, no network association, no connection state. Resolvable private
+addresses rotate so that nobody outside the building can log which child arrived
+when. Connections are used solely for provisioning and firmware update, in the
+dock, one at a time.
+
+A BLE advertisement is 31 bytes, leaving about 26 usable, so the over-the-air
+format is compact binary. The JSON in our schema is what the gateway produces
+after decoding, and it is not what travels through the air. The byte layout is
+in [`spec.md`](spec.md) section 9.
 
 ### Why the band has to come off
 
@@ -171,9 +238,71 @@ Security survives this because detection replaces retention. The strap circuit
 registers the breakaway in the same instant it happens. We never depend on the
 band staying on. We depend on knowing the moment it comes off.
 
-The breakaway force is the parameter we are least sure of. We have a typical
-range and no empirical validation, and it is listed as a calibration parameter
-in `spec.md` rather than as a constant.
+The clip is printed with a shear web for the prototype and would be magnetic in
+production. The breakaway force is the parameter we are least sure of. We have a
+typical range and no empirical validation, and it is listed as a calibration
+parameter in `spec.md` rather than as a constant, to be measured rather than
+assumed.
+
+---
+
+## The anchors
+
+One per zone, mains powered, wall mounted and out of reach. These are the
+cheapest part of the system and they do the most work for the feature set.
+
+| Component | Part                                        | Role                                                                                                        |
+| --------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| MCU       | ESP32-WROOM-32 dev board                    | Passive BLE scanning plus WiFi uplink. No IMU, no battery, no sensors.                                       |
+| Power     | USB power supply and cable                  | Mains. Radio cost is irrelevant here, which is exactly why WiFi belongs on this tier and not on the band.    |
+| Enclosure | Small wall-mount box                        | Physical protection, and out of children's reach                                                            |
+| Uplink    | WiFi to the facility network, ESP-NOW fallback | Not every facility has usable WiFi coverage in every room, so the fallback matters                        |
+
+Each anchor hears the same advertisement at the same moment and records the
+signal strength. It forwards one observation record to the gateway: band id,
+anchor id, signal strength, timestamp. That is the entire job. Anchors hold no
+keys, decode nothing, and decide nothing.
+
+**Placement priority.** If you deploy only a few, put them at the perimeter
+first. The entrance, then each outdoor gate. Perimeter crossing detection is far
+more reliable than indoor position and it is the highest-value alert the system
+produces.
+
+**What we claim from them.** Zone-level presence, not position. Nearest-anchor
+signal strength comparison gives room-level resolution. We do not claim
+trilateration, which falls apart indoors because 2.4 GHz is absorbed by bodies
+and a room of moving children is a moving radio environment. The limits are
+spelled out in [`spec.md`](spec.md) section 10.
+
+---
+
+## The gateway
+
+One per facility. Every agent runs here and this is where the raw data stops.
+
+| Component | Part                                    | Role                                                                                      |
+| --------- | --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| SBC       | Raspberry Pi 5, 4 GB                    | Runs the Zone Resolver, all five agents, the Safeguard, and the staff console               |
+| Storage   | 32 GB A2 microSD                        | OS, local feature retention, audit log                                                      |
+| Power     | 27 W USB-C power supply                 | The Pi 5 throttles or refuses to boot on an underpowered supply. Do not substitute.         |
+| BLE       | Built-in                                | Passive scanning. It acts as an anchor for its own zone.                                    |
+| Network   | Built-in WiFi and Ethernet              | Receives anchor observations, uploads summaries over mTLS                                   |
+| UPS       | UPS HAT or powerbank in passthrough     | Covers the power outage dependency in our RAID log                                          |
+
+One practical gotcha we have already hit: BLE scanning on the Pi 5 needs
+elevated privileges. Either set capabilities on the Python binary or run the
+scanner as a service with the right capabilities. It is worth solving before you
+need it.
+
+### How the three relate
+
+|                     | Band                     | Anchor              | Gateway                     |
+| ------------------- | ------------------------ | ------------------- | --------------------------- |
+| Power               | Battery, days            | Mains               | Mains and UPS               |
+| Radio               | BLE advertise only       | BLE scan plus WiFi  | WiFi and Ethernet, BLE scan |
+| Network credentials | None                     | Yes                 | Yes                         |
+| Quantity            | One per child            | One per zone        | One per facility            |
+| Intelligence        | Feature extraction only  | None, pure relay    | Everything                  |
 
 ---
 
@@ -186,9 +315,13 @@ We require two independent conditions: **circuit closed, plus wear-consistent
 motion within a defined window.** A band that clips and then never moves like a
 worn band enters `CLIP_FAILED` and goes to staff as a mismatch.
 
-The Attendance Manager reconciles three sources: clip events, motion
-confirmation, and the expected roster for the day. Alongside the register entry,
-it produces the set of mismatches between those three. The state machine and the
+The Attendance Manager reconciles four sources: clip events, motion
+confirmation, presence inside the building via anchor coverage, and the expected
+roster for the day. Alongside the register entry, it produces the set of
+mismatches between those four. Anchor coverage does not change the check-in
+rule, which still needs the circuit and the motion. It answers a different
+question, which is whether the child is still in the building, and it is what
+makes unaccompanied perimeter crossing detectable. The state machine and the
 mismatch list are in [`spec.md`](spec.md).
 
 ---
@@ -232,7 +365,7 @@ are in [`docs/blueprint.md`](docs/blueprint.md).
 Band to gateway, over BLE 5.0:
 
 - LE Secure Connections with bonding, so key agreement resists passive eavesdropping.
-- Per-device keys in the ESP32-S3 secure element. Compromising one band compromises one band.
+- Per-device keys held in ESP32C3 eFuse, not readable by application firmware. Compromising one band compromises one band.
 - Rotating resolvable private addresses. Without this, anyone within BLE range could passively log which child arrived when, from the street, with a phone. That is a real privacy attack on children and we treat it as in scope.
 - AES-128-CCM at the link layer, plus an application-layer HMAC per packet. The gateway drops anything it cannot authenticate.
 - Provisioning in the contactless dock only, never over the air.

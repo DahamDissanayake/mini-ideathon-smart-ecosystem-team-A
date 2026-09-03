@@ -17,7 +17,7 @@ control that the system needs.
 | Risk | Classifier trained on adult motion misreads child activity | Confidence floor, fail to unknown rather than to a class, staff-labelled bootstrap |
 | Risk | Clip tool lost or duplicated | Release events attributed to a staff badge, not to tool possession |
 | Risk | Physical compromise of the gateway exposes feature history for the whole facility | Disk encryption and physical siting, both assumed and not yet specified. Facility-set feature retention window bounds the exposure. |
-| Risk | Compromised band firmware signs plausible windows with a valid per-device key | Secure boot and signed firmware on the ESP32-S3, provisioning in the dock only. Assumed, not yet specified. |
+| Risk | Compromised band firmware signs plausible windows with a valid per-device key | Secure boot and signed firmware on the ESP32C3, provisioning in the dock only. Assumed, not yet specified. |
 | Risk | 2.4 GHz jamming silences every band at once | Degrades to facility-wide `SIGNAL_LOST`, which is loud and visible. Strap circuits keep working locally. No further control. |
 | Risk | Alert volume trains carers to dismiss alerts | Confidence floor, graded escalation, and a ranked worklist rather than an alarm per event. Not yet validated against a real facility's alert rate. |
 | Assumption | Parents will accept a worn device on their child | Consent record, opt-out path, plain-language disclosure |
