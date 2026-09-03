@@ -1,0 +1,2 @@
+# Standard library, plus one dependency for schema validation.
+jsonschema>=4.21

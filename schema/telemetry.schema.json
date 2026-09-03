@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://letgo-band.local/schema/telemetry.schema.json",
+  "title": "LetGo Band telemetry",
+  "description": "Both payload types that cross a tier boundary. band_window travels band to gateway over BLE. cloud_daily_summary travels gateway to cloud over mTLS. A record is one or the other, never both.",
+  "oneOf": [
+    { "$ref": "#/$defs/band_window" },
+    { "$ref": "#/$defs/cloud_daily_summary" }
+  ],
+
+  "$defs": {
+
+    "schema_version": {
+      "description": "Payload contract version. Bumped on any breaking field change. A receiver rejects a version it does not know rather than ignoring unknown fields.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+
+    "child_ref": {
+      "description": "Pseudonymous enrolment reference. Never a name, never a date of birth. The map to a real child stays inside the facility.",
+      "type": "string",
+      "pattern": "^enr-[0-9]{4}$"
+    },
+
+    "hmac_sig": {
+      "description": "HMAC-SHA256 over the payload, hex encoded, or the literal placeholder used in mock data. A receiver drops anything it cannot authenticate.",
+      "type": "string",
+      "minLength": 1
+    },
+
+    "clip_state": {
+      "description": "Strap state machine state. See spec.md section 3.",
+      "type": "string",
+      "enum": ["UNCLIPPED", "CLIPPED", "RELEASED_BY_TOOL", "BREAKAWAY", "CUT", "FAULT"]
+    },
+
+    "strap_event": {
+      "description": "null in the normal case. Carries a transition when the strap state changes. BREAKAWAY, CUT and FAULT are the strap breach class and are sent unbatched, ahead of any queued feature window.",
+      "type": ["string", "null"],
+      "enum": ["RELEASED_BY_TOOL", "BREAKAWAY", "CUT", "FAULT", null]
+    },
+
+    "attendance_state": {
+      "description": "Attendance state machine state. See spec.md section 4. The gateway holds the authoritative copy.",
+      "type": "string",
+      "enum": [
+        "UNASSIGNED",
+        "CLIP_PENDING",
+        "PRESENT",
+        "CLIP_FAILED",
+        "STRAP_BREACH",
+        "SIGNAL_LOST",
+        "CHECKED_OUT"
+      ]
+    },
+
+    "activity_features": {
+      "description": "Features extracted on the band. Raw IMU samples are never represented here and never leave the band.",
+      "type": "object",
+      "properties": {
+        "mean_accel_mag": {
+          "description": "Mean acceleration magnitude over the window, in g.",
+          "type": "number",
+          "minimum": 0
+        },
+        "accel_variance": {
+          "description": "Variance of acceleration magnitude over the window.",
+          "type": "number",
+          "minimum": 0
+        },
+        "step_count": {
+          "description": "Steps segmented on the band during the window.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "cadence_spm": {
+          "description": "Steps per minute during the window.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "posture_est": {
+          "description": "Posture estimate for the window. The vocabulary is not fixed yet, see OPEN-QUESTIONS.md question 2.6.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "mean_accel_mag",
+        "accel_variance",
+        "step_count",
+        "cadence_spm",
+        "posture_est"
+      ],
+      "additionalProperties": false
+    },
+
+    "band_window": {
+      "title": "Band to gateway, per feature window",
+      "description": "Emitted once per window_s over BLE. Carries extracted features and strap state, never raw samples.",
+      "type": "object",
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "device_id": {
+          "description": "Band identity. Facility-local, and forbidden in the cloud payload.",
+          "type": "string",
+          "pattern": "^lgb-[0-9]{4}$"
+        },
+        "child_ref": { "$ref": "#/$defs/child_ref" },
+        "ts": {
+          "description": "Band-reported window end time, UTC. The gateway also timestamps on receipt, because band clocks drift.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "tier": {
+          "description": "Payload discriminator.",
+          "const": "band"
+        },
+        "window_s": {
+          "description": "Length of the window these features summarise. A calibration parameter, see spec.md section 6.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "strap_closed": {
+          "description": "Circuit continuity. true means closed, which means worn. The strap circuit is the authority on wear, and no classifier output can contradict it.",
+          "type": "boolean"
+        },
+        "clip_state": { "$ref": "#/$defs/clip_state" },
+        "strap_event": { "$ref": "#/$defs/strap_event" },
+        "attendance_state": { "$ref": "#/$defs/attendance_state" },
+        "activity_features": { "$ref": "#/$defs/activity_features" },
+        "battery_pct": {
+          "description": "Remaining charge. Drives the battery critical escalation, which fires before depletion.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rssi_dbm": {
+          "description": "Link quality, used to separate radio dropout from removal. Forbidden in the cloud payload, because it leaks position within the facility.",
+          "type": "integer",
+          "minimum": -127,
+          "maximum": 0
+        },
+        "confidence": {
+          "description": "On-band segmentation confidence for this window. Below the confidence floor the Safeguard suppresses and logs rather than guessing.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fw_version": {
+          "description": "Firmware provenance, so a bad version can be traced through the audit log.",
+          "type": "string",
+          "minLength": 1
+        },
+        "model_version": {
+          "description": "On-band model provenance.",
+          "type": "string",
+          "minLength": 1
+        },
+        "seq": {
+          "description": "Monotonic per device. Orders windows and detects gaps.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "sig": { "$ref": "#/$defs/hmac_sig" }
+      },
+      "required": [
+        "schema_version",
+        "device_id",
+        "child_ref",
+        "ts",
+        "tier",
+        "window_s",
+        "strap_closed",
+        "clip_state",
+        "strap_event",
+        "attendance_state",
+        "activity_features",
+        "battery_pct",
+        "rssi_dbm",
+        "confidence",
+        "fw_version",
+        "model_version",
+        "seq",
+        "sig"
+      ],
+      "additionalProperties": false
+    },
+
+    "cloud_daily_summary": {
+      "title": "Gateway to cloud, per child per day",
+      "description": "The only payload that leaves the facility. additionalProperties is false so that any disallowed field is rejected structurally at ingest. Forbidden here: raw motion in any form (activity_features), location (rssi_dbm), per-window data (window_s, per-window ts, per-window confidence), trend flags, device_id, clip_state, strap_event, and version provenance. Data minimisation is enforced by this schema rather than by policy.",
+      "type": "object",
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "facility_id": {
+          "description": "Which facility. Needed for multi-site administration.",
+          "type": "string",
+          "pattern": "^fac-[0-9]{3}$"
+        },
+        "child_ref": { "$ref": "#/$defs/child_ref" },
+        "date": {
+          "description": "The day this summary covers.",
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "check_in": {
+          "description": "Time the two-condition attendance rule was satisfied, UTC.",
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "check_out": {
+          "description": "Time of the staff tool release that ended the session, UTC. null if the day ended without one.",
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "active_minutes": {
+          "description": "Daily total. Not a series, and not resolvable to any part of the day.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "movement_variety_index": {
+          "description": "Single figure for the day, 0 to 1. Formula not yet specified, see OPEN-QUESTIONS.md question 2.2.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fitness_session_participation": {
+          "type": "boolean"
+        },
+        "anomaly_events_resolved": {
+          "description": "A count. Not which anomaly, not when it happened, not what the strap state was.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "gateway_id": {
+          "description": "Which gateway sent it, for certificate and revocation purposes.",
+          "type": "string",
+          "pattern": "^gw-[0-9]{3}-[a-z]$"
+        },
+        "seq": {
+          "description": "Monotonic per gateway. With date, this is the replay protection.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "sig": { "$ref": "#/$defs/hmac_sig" }
+      },
+      "required": [
+        "schema_version",
+        "facility_id",
+        "child_ref",
+        "date",
+        "check_in",
+        "check_out",
+        "active_minutes",
+        "movement_variety_index",
+        "fitness_session_participation",
+        "anomaly_events_resolved",
+        "gateway_id",
+        "seq",
+        "sig"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

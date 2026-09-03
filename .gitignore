@@ -1,0 +1,25 @@
+# Internal working notes, not published with the submission
+OPEN-QUESTIONS.md
+
+# Generator output
+out/
+*.jsonl
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
