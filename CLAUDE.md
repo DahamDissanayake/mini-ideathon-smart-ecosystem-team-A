@@ -329,6 +329,8 @@ and it does not surface a hedged result.
 | Components, the strap circuit, the breakaway clip | `docs/hardware.md` |
 | Agent orchestration diagram and an end-to-end walkthrough | `docs/blueprint.md` |
 | Payload shapes and what is stored where | `docs/telemetry-schema.md` |
-| Threat model, access control, encryption | `docs/security.md` |
+| How telemetry moves, ingest stages, delivery guarantees, health metrics | `docs/telemetry-pipeline.md` |
+| What is backed up, recovery scenarios, backups versus deletion | `docs/backup-recovery.md` |
+| Threat model, access control, administrative, technical and physical controls | `docs/security.md` |
 | Risks, assumptions, issues, dependencies | `docs/raid.md` |
 | Things the design does not yet settle | `OPEN-QUESTIONS.md` |

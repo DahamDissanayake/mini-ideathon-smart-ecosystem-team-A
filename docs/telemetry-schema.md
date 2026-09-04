@@ -1,17 +1,30 @@
 # Telemetry schema
 
-Two payload types cross a tier boundary. Everything else stays where it was
-computed. The machine-readable version of both is
+Two payload types cross a tier boundary and get stored. Everything else stays
+where it was computed. The machine-readable version of both is
 [`../schema/telemetry.schema.json`](../schema/telemetry.schema.json), and
 [`../mock/generator.py`](../mock/generator.py) emits records that validate
 against it.
+
+This file is the **what**. The **how** is in
+[`telemetry-pipeline.md`](telemetry-pipeline.md): the hops, the anchor
+observation envelope that carries a band advertisement to the gateway, the nine
+ingest stages, delivery guarantees, buffering, and health telemetry. What is and
+is not backed up is in [`backup-recovery.md`](backup-recovery.md).
 
 ---
 
 ## 1. Band to gateway, per feature window
 
-Sent over BLE, one per `window_s` (currently 30 s). Strap events are sent
-unbatched and ahead of any queued window.
+**This is the gateway-side representation, after decoding.** The band broadcasts
+a 26-byte binary advertisement, laid out in [`../spec.md`](../spec.md) section
+9, which an anchor forwards to the gateway. The JSON below is what the gateway
+holds once it has verified the authentication tag, resolved the rotating
+identifier to a band, deduplicated the copies several anchors forwarded, and
+decoded the bytes. No JSON is ever transmitted by a band.
+
+One per `window_s` (currently 30 s). Strap events are advertised unbatched and
+ahead of any queued window.
 
 ```json
 {
@@ -56,7 +69,7 @@ unbatched and ahead of any queued window.
 | `attendance_state` | Attendance state as the band last knew it. The gateway holds the authoritative copy. |
 | `activity_features` | The extracted features. Raw samples never appear here. |
 | `battery_pct` | Remaining charge. Drives the battery critical escalation. |
-| `rssi_dbm` | Link quality, used to separate radio dropout from removal. |
+| `rssi_dbm` | Strongest signal strength across the anchors that heard this window, used to separate radio dropout from removal. The per-anchor set of readings, which is what the Zone Resolver consumes, lives in the anchor observation envelope in [`telemetry-pipeline.md`](telemetry-pipeline.md) section 3 and is not part of this record. |
 | `confidence` | On-band segmentation confidence for this window. |
 | `fw_version`, `model_version` | Provenance, so a bad firmware or model version can be traced through the audit log. |
 | `seq` | Monotonic per device. Orders windows and detects gaps. |
@@ -173,6 +186,14 @@ in order to act.
 | Daily summary | No | Yes | Yes |
 | Anomaly flags | No | Yes | Only if escalated and resolved |
 | Trend flags | No | Yes, staff-reviewed | **Never sent unreviewed** |
+| Zone assignments and zone history | No | Yes, gateway only | **Never** |
+
+Stored is not the same as backed up, and the difference is deliberate. Features,
+classifications, and all zone data are excluded from every backup, so their
+retention window is the whole of their life. Configuration, keys, attendance,
+consent, and the audit log are backed up, because those are the things that
+cannot be recreated. The full register is in
+[`backup-recovery.md`](backup-recovery.md).
 
 One row in this table needs resolving. "Raw IMU samples, gateway, retained
 locally, short window" does not sit cleanly with the pipeline above, in which

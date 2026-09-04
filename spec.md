@@ -268,6 +268,10 @@ Reconciliation mismatches it can raise:
 | Zone flapping between two anchors | Hysteresis holds the current zone. If the margin stays below `zone_hysteresis_margin`, the Zone Resolver returns `unknown` rather than alternating. |
 | Calibration table missing | The Zone Resolver falls back to nearest-anchor comparison alone and marks its output low confidence. Zone enrichment continues, and nothing safety-critical changes, because nothing safety-critical rested on zone in the first place. |
 | Gateway down | Bands buffer to local storage and keep monitoring the strap. Staff console unavailable, so the facility falls back to the paper register for the outage. Gateway runs on a UPS to make this rare. |
+| Gateway lost, stolen, or rebuilt | Configuration, band keys, attendance, consent and the audit log restore from backup. Features, classifications and zone data are not backed up and are gone, which is accepted: the summaries are built and the alerts already fired. Facility runs on paper until the restore completes. See `docs/backup-recovery.md`. |
+| An anchor floods the gateway with envelopes | Per-anchor ingest rate limit sheds the excess, the drops are counted, and anchor health reports it. One anchor cannot starve the others. |
+| Anchor buffer overflows during a WiFi outage | Oldest envelopes dropped first, and the drop is counted and reported. A strap breach is held ahead of the queue and is not dropped. |
+| Backup fails or is skipped | Raises a gateway health alert on the day it happens rather than being discovered at the next restore. |
 | Cloud ingest rejects a payload | Payload is quarantined on the gateway with the validator error, and retried after correction. Nothing is silently dropped. |
 | Roster missing or stale | Attendance runs on clip plus motion alone and every child is raised as a "not on roster" mismatch, rather than the day failing. |
 | Clip tool signal ambiguous at release | Event is classified `CUT` and escalates. The system errs towards escalation. |
@@ -307,13 +311,22 @@ have working values, and 6 dB is a starting point rather than a measurement. The
 rest are named so that they cannot be quietly hardcoded, which is the whole point
 of listing them here.
 
+Six further parameters govern the ingest path rather than the sensing: the
+dedupe window, the per-anchor rate limit, the anchor and cloud queue depths, the
+health metric retention, and the anchor clock skew budget. They are listed in
+`docs/telemetry-pipeline.md` section 10, in the same spirit and for the same
+reason.
+
 ---
 
 ## 7. Interface contracts
 
 Payload shapes, field-by-field, and the per-tier computation table are in
 `docs/telemetry-schema.md`. The machine-readable version is
-`schema/telemetry.schema.json`.
+`schema/telemetry.schema.json`. The anchor observation envelope, the nine ingest
+stages the gateway runs between receiving bytes and publishing to the message
+bus, and the delivery guarantee at each hop are in
+`docs/telemetry-pipeline.md`.
 
 Two rules govern every message:
 

@@ -68,4 +68,17 @@ deployment.
 | 5.3 | Deletion verification | "Deletion is verifiable" is asserted. The mechanism is not specified. |
 | 5.4 | Gateway capacity | Bands per gateway is not stated, and it bounds facility size. |
 | 5.5 | Implementation stack | Nothing in the plan fixes a language or runtime for the gateway. |
-| 5.6 | Multi-gateway facilities | One gateway per facility is assumed throughout. Large facilities may need more, which raises a handover question for bands moving between coverage areas. |
+| 5.6 | Multi-gateway facilities | One gateway per facility is assumed throughout. Large facilities may need more, which raises a handover question for bands moving between coverage areas, and a question about which gateway holds the configuration of record for backup purposes. |
+
+---
+
+## 6. Raised by the telemetry and backup design
+
+| # | Question | Assumption in the current files | What settles it |
+|---|---|---|---|
+| 6.1 | Should the advertisement telemetry bytes be encrypted, not just authenticated? | They are not. `docs/security.md` section 8 states plainly what an eavesdropper learns: a rotating identifier, a battery level, strap flags, and four motion features, belonging to a band they cannot link across rotations. | A decision on cost. Encrypting under the per-device key means the gateway must try candidate keys before it can decode, which it already does to resolve `adv_id`, so the cost may be smaller than it looks. Needs measuring against a facility-sized fleet. |
+| 6.2 | How is the anchor layer simulated? | `mock/generator.py` predates the broadcast topology and emits gateway-side band windows directly, so it exercises the agents and not the ingest path. Nothing tests dedupe, tag verification, or the Zone Resolver. | Extending the generator to emit anchor observation envelopes with plausible per-anchor signal strengths. This is the prerequisite for testing zone resolution at all. |
+| 6.3 | What are `adv_dedupe_window` and `anchor_ingest_rate_limit`? | Both unset. `docs/telemetry-pipeline.md` section 10 names them. | Measurement in a real facility. The first decides whether zone resolution works, the second decides whether one broken anchor takes ingest down. |
+| 6.4 | Do we escrow a backup key for the per-device band keys, or re-provision after a rebuild? | `docs/backup-recovery.md` section 5 describes escrow under split custody, and names re-provisioning in the dock as the alternative that removes escrow risk entirely at the cost of an evening of staff time. | A facility decision, but we have to ship a default. The tension is real: keys sealed to the platform cannot be restored to new hardware, which is the whole purpose of a backup. |
+| 6.5 | Are the RPO and RTO targets right? | The register in `docs/backup-recovery.md` section 2 sets targets against what a daycare could plausibly tolerate. None is measured, and the gateway rebuild target assumes spare hardware exists. | Agreeing them with a real facility during the pilot, and timing an actual rebuild rehearsal. |
+| 6.6 | Where does the line sit on health telemetry for a multi-site operator? | Health telemetry stays in the facility by default. A fleet-health rollup for a multi-site operator is described as needing its own allow-list and does not exist. | Whether multi-site operation actually needs it. A fleet health endpoint is exactly where per-band labels would reappear, so it should not be built casually. |

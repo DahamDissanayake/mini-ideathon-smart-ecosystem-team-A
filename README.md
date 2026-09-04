@@ -362,13 +362,20 @@ are in [`docs/blueprint.md`](docs/blueprint.md).
 
 ## Connectivity and encryption
 
-Band to gateway, over BLE 5.0:
+Band to anchors, over connectionless BLE 5.0. There is no pairing, no session,
+and no link-layer encryption, because there is no link:
 
-- LE Secure Connections with bonding, so key agreement resists passive eavesdropping.
 - Per-device keys held in ESP32C3 eFuse, not readable by application firmware. Compromising one band compromises one band.
-- Rotating resolvable private addresses. Without this, anyone within BLE range could passively log which child arrived when, from the street, with a phone. That is a real privacy attack on children and we treat it as in scope.
-- AES-128-CCM at the link layer, plus an application-layer HMAC per packet. The gateway drops anything it cannot authenticate.
+- A truncated HMAC-SHA256 tag on every advertisement. The gateway drops anything it cannot authenticate, and no anchor is trusted to make that check.
+- The sequence number sits inside the authenticated bytes, so a captured advertisement cannot be replayed.
+- Rotating resolvable private addresses **and** a rotating identifier inside the payload. Rotating one and not the other achieves nothing: anyone within BLE range could otherwise passively log which child arrived when, from the street, with a phone. That is a real privacy attack on children and we treat it as in scope.
+- The advertisement is authenticated and not encrypted, and we say so plainly. [`docs/security.md`](docs/security.md) section 8 sets out exactly what an eavesdropper learns, which is a rotating identifier and four motion features belonging to nobody in particular.
 - Provisioning in the contactless dock only, never over the air.
+
+Anchors to gateway:
+
+- WiFi, with ESP-NOW as the fallback, on a network segment routed only to the gateway.
+- Anchors hold no band keys and no zone map. They forward the bytes they heard and how strongly they heard them, and everything else is re-derived at the gateway.
 
 Gateway to cloud:
 
@@ -380,8 +387,36 @@ Gateway to cloud:
 
 Our threat model has four adversaries, including the facility itself acting
 against its own staff. Facility reporting is group-level and shift-level, and
-per-carer metrics are not generated. The full threat model, access control
-matrix, and guardrails are in [`docs/security.md`](docs/security.md).
+per-carer metrics are not generated.
+
+The controls are set out as administrative, technical, and physical, because a
+control set that is only technical is not a control set: a rotating identifier
+is worthless if the gateway sits unlocked in a corridor. Every control is listed
+in a register with its class, the threat it answers, and an honest status of
+implemented, designed, or assumed. Most of them are currently assumed, and the
+assumptions concentrate in the administrative and physical columns, which is
+where a project run by engineers under-invests. Full threat model, access
+control matrix, control register, and guardrails are in
+[`docs/security.md`](docs/security.md).
+
+---
+
+## Telemetry and backups
+
+How a broadcast becomes a record: the hops, the anchor observation envelope, the
+nine ingest stages the gateway runs before an agent sees anything, delivery
+guarantees, which buffer overflows first, and the rule that health telemetry
+carries no child identity so that monitoring cannot become a second location log.
+See [`docs/telemetry-pipeline.md`](docs/telemetry-pipeline.md).
+
+Backups follow one rule: **back up what is expensive to recreate, and do not back
+up what is cheap to lose.** The calibration table is a person walking the
+building, so it is backed up. Raw feature windows and zone data are excluded
+entirely, which keeps a bounded retention window bounded and means that even a
+total compromise of the off-site copy exposes no child's movement. Register,
+recovery scenarios, the key escrow tension, and how backups interact with a
+deletion request are in
+[`docs/backup-recovery.md`](docs/backup-recovery.md).
 
 ---
 
@@ -429,7 +464,9 @@ band drains its buffer, which is what the gateway actually sees.
 | [`spec.md`](spec.md)                                           | Inputs and outputs per tier, the hard constraints, both state machines, the failure path table, and the parameters needing calibration |
 | [`docs/blueprint.md`](docs/blueprint.md)                       | Agent orchestration diagram, failure paths, and an end-to-end walkthrough                                                              |
 | [`docs/telemetry-schema.md`](docs/telemetry-schema.md)         | Both payload shapes, per-tier computation, and what is stored where                                                                    |
-| [`docs/security.md`](docs/security.md)                         | Threat model, access control matrix, encryption tables, guardrails                                                                     |
+| [`docs/telemetry-pipeline.md`](docs/telemetry-pipeline.md)     | How telemetry actually moves: hops, the anchor envelope, the nine ingest stages, delivery guarantees, buffering, health telemetry      |
+| [`docs/backup-recovery.md`](docs/backup-recovery.md)           | What is backed up and what is deliberately not, the register, recovery scenarios, key escrow, backups versus deletion                  |
+| [`docs/security.md`](docs/security.md)                         | Threat model, access control matrix, administrative, technical and physical controls, the control register, link encryption            |
 | [`docs/raid.md`](docs/raid.md)                                 | Risks, assumptions, issues, dependencies                                                                                               |
 | [`schema/telemetry.schema.json`](schema/telemetry.schema.json) | JSON Schema for both payload types                                                                                                     |
 | [`mock/generator.py`](mock/generator.py)                       | Simulator for bands and scenarios                                                                                                      |
