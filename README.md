@@ -8,8 +8,14 @@ activity monitoring.
 
 **Status:** this is a design and a simulation. Nothing here is deployed. The
 band is a prototype, the classifier has not been trained on real child activity
-data, and several parameters in `spec.md` are named as unvalidated. What runs
-today is the mock data generator in `mock/`.
+data, and several parameters in `spec.md` are named as unvalidated. Two things
+run today: the mock data generator in [`mock/`](mock/), which stands in for the
+bands, and the IMU bring-up rig in
+[`web-imu-data-rx/`](web-imu-data-rx/), which streams a real six-axis IMU off an
+ESP32 and plots it live. Everything between those two ends, the anchors, the
+gateway, the Zone Resolver, the agents and the Safeguard, is specified and not
+yet built. The table in [What is built](#what-is-built) says which is which,
+line by line.
 
 ---
 
@@ -456,6 +462,74 @@ band drains its buffer, which is what the gateway actually sees.
 
 ---
 
+## Hardware bring-up, the IMU dashboard
+
+Before a movement classifier can be trained, the sensor has to be trusted. The
+rig in [`web-imu-data-rx/`](web-imu-data-rx/) is that check: an ESP32-S3 with an
+MPU6050 streaming six axes at 100 Hz over BLE, and a single-file browser
+dashboard that plots them live over Web Bluetooth. No backend, no build step, no
+dependencies.
+
+```
+web-imu-data-rx/
+├── index.html                      the dashboard, one file
+├── start.bat                       serves it and opens Chrome or Edge
+└── sample-imu-data/
+    ├── sample-imu-data.ino         ESP32 firmware, Nordic UART service
+    └── env.h                       advertised device name
+```
+
+Run it by double-clicking `start.bat`, or by hand:
+
+```bash
+cd web-imu-data-rx
+python -m http.server 8000     # file:// will not work, Web Bluetooth needs a secure context
+```
+
+Chrome or Edge only. Firefox and Safari do not implement Web Bluetooth, and
+Brave ships it disabled. The page says so up front rather than failing at
+Connect.
+
+The wire format is one newline-terminated CSV line per sample,
+`ax,ay,az,gx,gy,gz`, accelerometer in g and gyroscope in deg/s. The charts hold
+a 200-sample window and stay raw, because that is where the signal is. The
+numeric tiles are smoothed on a 120 ms refresh, because at 100 Hz raw digits are
+unreadable. Full setup, the LED status codes, the connection flow, and the
+corrections made to the original sketch (unadvertised service UUID, default MTU
+splitting every frame, a connection interval too slow for 100 Hz) are in
+[`web-imu-data-rx/README.md`](web-imu-data-rx/README.md).
+
+**What this proves, and what it does not.** It proves the sensor, the sample
+rate, the axis conventions and the frame format, which is what feature
+extraction will be built on. It is deliberately not the field topology: it uses
+a BLE *connection* to one central, and the deployed band
+[connects to nothing](#radio-behaviour) and broadcasts to many anchors instead.
+The dashboard is also a viewer and not a recorder, so it does not yet produce
+the labelled capture the classifier needs.
+
+---
+
+## What is built
+
+Honest state of each part, so a reviewer does not have to infer it from the
+prose.
+
+| Part | State | Where |
+| --- | --- | --- |
+| System scope, agent contracts, safety precedence | Specified | [`CLAUDE.md`](CLAUDE.md) |
+| Interfaces, state machines, parameters, failure paths | Specified | [`spec.md`](spec.md) |
+| Telemetry payload shapes and JSON Schema | Specified, and enforced in code | [`schema/`](schema/), [`docs/telemetry-schema.md`](docs/telemetry-schema.md) |
+| Mock band and scenario generator | **Runs** | [`mock/generator.py`](mock/generator.py) |
+| IMU capture and live plotting over BLE | **Runs**, on an ESP32-S3 and MPU6050 | [`web-imu-data-rx/`](web-imu-data-rx/) |
+| Band firmware: strap ADC, feature windows, BLE advertising | Not built | designed in [`spec.md`](spec.md) sections 1, 3 and 9 |
+| Strap loop, breakaway clip, enclosure | Concept and render, no built unit | [The band](#the-band) |
+| Anchor firmware and the anchor-to-zone map | Not built | designed in [`spec.md`](spec.md) sections 8 and 10 |
+| Zone Resolver, the five agents, the Safeguard | Not built | designed in [`CLAUDE.md`](CLAUDE.md) sections 3 to 6 |
+| Staff console, parent portal, cloud tier | Not built | designed in [`docs/blueprint.md`](docs/blueprint.md) |
+| Movement Classifier model | Not trained, no labelled dataset exists | [Known limitations](#known-limitations) |
+
+---
+
 ## Repository map
 
 | File                                                           | Contents                                                                                                                               |
@@ -470,6 +544,9 @@ band drains its buffer, which is what the gateway actually sees.
 | [`docs/raid.md`](docs/raid.md)                                 | Risks, assumptions, issues, dependencies                                                                                               |
 | [`schema/telemetry.schema.json`](schema/telemetry.schema.json) | JSON Schema for both payload types                                                                                                     |
 | [`mock/generator.py`](mock/generator.py)                       | Simulator for bands and scenarios                                                                                                      |
+| [`mock/requirements.txt`](mock/requirements.txt)               | The generator's one dependency, `jsonschema`                                                                                           |
+| [`web-imu-data-rx/`](web-imu-data-rx/)                         | IMU bring-up rig: ESP32 sketch, Web Bluetooth dashboard, and its own README                                                            |
+| [`img/`](img/)                                                 | Product render and logos used in this README                                                                                           |
 | [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md)                       | What the design does not yet settle                                                                                                    |
 
 ---
@@ -482,3 +559,10 @@ band drains its buffer, which is what the gateway actually sees.
 - The signal loss threshold depends on measurements in a real facility that we
   have not made.
 - The hardware is a prototype. No safety certification work has been done.
+- The bring-up rig proves the IMU and the frame format only. It uses a BLE
+  connection to one central, which is the opposite of the broadcast topology the
+  band deploys with, and it is a viewer rather than a recorder, so it does not
+  yet produce training captures.
+- Nothing between the band and the parent portal is implemented. The anchors,
+  the gateway, the Zone Resolver, the agents and the Safeguard exist as
+  specifications and as the contracts in `CLAUDE.md`, not as running code.
