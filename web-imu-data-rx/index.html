@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1a1a'/><polyline points='3,20 8,10 13,24 18,8 23,19 29,14' fill='none' stroke='%23448AFF' stroke-width='2.5' stroke-linejoin='round' stroke-linecap='round'/></svg>">
+<title>IMU Data Dashboard</title>
+<style>
+  :root {
+    --bg:    #1a1a1a;
+    --panel: #2b2b2b;
+    --text:  #ffffff;
+    --muted: #aaaaaa;
+    --x:     #FF5252;
+    --y:     #448AFF;
+    --z:     #69F0AE;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  /* Header */
+  header {
+    flex: 0 0 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 15px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #333;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  #status { font-size: 13px; color: gray; }
+  #status.connecting { color: orange; }
+  #status.connected  { color: #4caf50; }
+  #status.error      { color: #f44336; }
+  .spacer { flex: 1; }
+  .sub { font-size: 11px; color: #666; }
+
+  /* Toolbar */
+  #toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 15px;
+    border-bottom: 1px solid #333;
+  }
+  select {
+    font-family: inherit;
+    font-size: 12px;
+    color: #fff;
+    background: var(--panel);
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 6px 8px;
+    min-width: 260px;
+  }
+  select:disabled { opacity: .45; }
+
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  #btnAdd        { background: #444; }
+  #btnConnect    { background: #1f6aa5; }
+  #btnDisconnect { background: #444; }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  /* Live readouts */
+  #tiles {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .tile {
+    background: var(--panel);
+    border-radius: 6px;
+    padding: 6px 10px;
+    border-left: 3px solid transparent;
+  }
+  .tile.x { border-left-color: var(--x); }
+  .tile.y { border-left-color: var(--y); }
+  .tile.z { border-left-color: var(--z); }
+  .tile .label {
+    font-size: 10px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .tile .value {
+    font-size: 16px;
+    /* Tabular figures keep every digit the same width, so a steady number
+       does not jitter sideways as its digits change. */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    margin-top: 2px;
+  }
+
+  /* Charts */
+  #charts {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 12px 12px;
+    min-height: 0;
+  }
+  .chart {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .chart canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Help panel, hidden once connected */
+  #help {
+    margin: 0 12px 12px;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-left: 3px solid #1f6aa5;
+    border-radius: 6px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--muted);
+  }
+  #help b { color: var(--text); }
+  #help code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #ddd;
+  }
+  #help ol { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>IMU Data Dashboard</h1>
+  <span id="status">Not Connected</span>
+  <span class="spacer"></span>
+  <span class="sub">BLE &middot; 6-axis &middot; Nordic UART</span>
+</header>
+
+<div id="toolbar">
+  <select id="deviceSelect" disabled></select>
+  <button id="btnAdd">Add device&hellip;</button>
+  <button id="btnConnect" disabled>Connect</button>
+  <button id="btnDisconnect" disabled>Disconnect</button>
+  <label class="check">
+    <input type="checkbox" id="chkAll"> Show all nearby devices
+  </label>
+</div>
+
+<div id="tiles">
+  <div class="tile x"><div class="label">Acc X</div><div class="value" id="vAx">&mdash;</div></div>
+  <div class="tile y"><div class="label">Acc Y</div><div class="value" id="vAy">&mdash;</div></div>
+  <div class="tile z"><div class="label">Acc Z</div><div class="value" id="vAz">&mdash;</div></div>
+  <div class="tile x"><div class="label">Gyro X</div><div class="value" id="vGx">&mdash;</div></div>
+  <div class="tile y"><div class="label">Gyro Y</div><div class="value" id="vGy">&mdash;</div></div>
+  <div class="tile z"><div class="label">Gyro Z</div><div class="value" id="vGz">&mdash;</div></div>
+  <div class="tile"><div class="label">Rate</div><div class="value" id="vHz">&mdash;</div></div>
+</div>
+
+<div id="help">
+  <b>To start streaming:</b>
+  <ol>
+    <li>Flash <code>sample-imu-data/sample-imu-data.ino</code> and power the board. A
+        <b>blinking purple</b> LED means it is advertising.</li>
+    <li>Press <b>Add device&hellip;</b> and pick <code>test letGo device</code> from the browser's
+        chooser. You only do this once; it is then remembered in the dropdown.</li>
+    <li>Press <b>Connect</b>. The board blinks green three times on success.</li>
+  </ol>
+  The chooser lists devices advertising the Nordic UART service. Tick
+  <b>Show all nearby devices</b> to drop that filter.
+</div>
+
+<div id="charts">
+  <div class="chart"><canvas id="canvasAccel"></canvas></div>
+  <div class="chart"><canvas id="canvasGyro"></canvas></div>
+</div>
+
+<script>
+"use strict";
+
+/* Receives the CSV stream from sample-imu-data.ino over BLE:
+     ax,ay,az,gx,gy,gz\n
+   Accelerometer in g, gyroscope in deg/s, two decimals each, 100 Hz. */
+
+const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_TX_CHAR = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // board -> browser (notify)
+
+const WINDOW  = 200;   // samples held on screen
+const ACC_LIM = 2.0;   // g, chart y-limit
+const GYR_LIM = 400;   // deg/s, chart y-limit
+const LAST_KEY = "imu-dashboard.lastDeviceId";
+
+/* Readout smoothing. At 100 Hz the raw numbers change faster than they can be
+   read, so the tiles refresh on their own slow cadence and show a smoothed
+   value rather than whichever sample happened to land last. Two stages:
+   a mean over the newest AVG_N samples, then a light exponential filter so
+   the displayed figure eases between updates instead of stepping.
+   The charts are deliberately left raw - that is where the real signal is. */
+const TILE_MS  = 120;  // how often the readouts refresh
+const AVG_N    = 12;   // samples averaged per refresh (~120 ms at 100 Hz)
+const TILE_EMA = 0.35; // 0 = frozen, 1 = no smoothing
+
+// Data state
+const buf = { ax: [], ay: [], az: [], gx: [], gy: [], gz: [] };
+let latest = null;
+let frameTimes = [];    // arrival times, for the rate readout
+let lineBuf = "";       // reassembles CSV lines split across BLE notifies
+const decoder = new TextDecoder();
+
+// Readout state
+let disp = null;        // smoothed values behind the tiles
+let dispHz = 0;
+let lastTileMs = 0;
+
+// Connection state
+const devices = new Map();  // device.id -> BluetoothDevice
+let active = null;
+let txChar = null;
+
+const $ = function (id) { return document.getElementById(id); };
+const statusEl      = $("status");
+const deviceSelect  = $("deviceSelect");
+const btnAdd        = $("btnAdd");
+const btnConnect    = $("btnConnect");
+const btnDisconnect = $("btnDisconnect");
+const chkAll        = $("chkAll");
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || "";
+}
+
+// ── Frame parsing ──────────────────────────────────────────────────────────
+function parseLine(line) {
+  const p = line.split(",");
+  if (p.length !== 6) return null;
+
+  const n = [];
+  for (let i = 0; i < 6; i++) {
+    if (p[i].trim() === "") return null;
+    const v = Number(p[i]);
+    if (!isFinite(v)) return null;
+    n.push(v);
+  }
+  return { ax: n[0], ay: n[1], az: n[2], gx: n[3], gy: n[4], gz: n[5] };
+}
+
+function pushFrame(f) {
+  const keys = Object.keys(buf);
+  for (let i = 0; i < keys.length; i++) {
+    const s = buf[keys[i]];
+    s.push(f[keys[i]]);
+    if (s.length > WINDOW) s.shift();
+  }
+  latest = f;
+  frameTimes.push(performance.now());
+}
+
+function onNotify(event) {
+  lineBuf += decoder.decode(event.target.value);
+
+  // Guard against a stream that never yields a newline (garbled MTU split)
+  if (lineBuf.length > 4096) lineBuf = "";
+
+  let nl;
+  while ((nl = lineBuf.indexOf("\n")) !== -1) {
+    const line = lineBuf.slice(0, nl).trim();
+    lineBuf = lineBuf.slice(nl + 1);
+    if (!line) continue;
+    const f = parseLine(line);
+    if (f) pushFrame(f);
+  }
+}
+
+// ── Device list ────────────────────────────────────────────────────────────
+/* The browser deliberately offers no API to scan for nearby devices from a
+   page - picking one always goes through the chooser that requestDevice()
+   opens. getDevices() returns the devices already permitted for this origin,
+   which is what keeps the dropdown populated across reloads. It is gated
+   behind chrome://flags/#enable-web-bluetooth-new-permissions-backend on some
+   builds, so devices added this session are also tracked in `devices`. */
+function remember(d) {
+  if (!devices.has(d.id)) d.addEventListener("gattserverdisconnected", onDisconnected);
+  devices.set(d.id, d);
+}
+
+async function loadKnownDevices() {
+  if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+  try {
+    const list = await navigator.bluetooth.getDevices();
+    for (let i = 0; i < list.length; i++) remember(list[i]);
+  } catch (err) {
+    console.info("getDevices() unavailable:", err.message);
+  }
+}
+
+function renderDeviceList(preferId) {
+  const want = preferId || deviceSelect.value ||
+               (window.localStorage ? localStorage.getItem(LAST_KEY) : null);
+
+  deviceSelect.innerHTML = "";
+
+  if (devices.size === 0) {
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = "No devices yet — click Add device…";
+    deviceSelect.appendChild(o);
+    deviceSelect.disabled = true;
+    btnConnect.disabled = true;
+    return;
+  }
+
+  devices.forEach(function (d, id) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = d.name || "(unnamed device)";
+    deviceSelect.appendChild(o);
+  });
+
+  if (want && devices.has(want)) deviceSelect.value = want;
+
+  const busy = !!(active && active.gatt.connected);
+  deviceSelect.disabled = busy;
+  btnConnect.disabled = busy;
+}
+
+async function addDevice() {
+  if (!navigator.bluetooth) {
+    setStatus("Web Bluetooth unavailable in this browser", "error");
+    return;
+  }
+
+  /* Filter on the service rather than the device name: the sketch advertises
+     the Nordic UART UUID, so any board running it shows up no matter what
+     BLE_DEVICE_NAME is set to in env.h. */
+  const options = chkAll.checked
+    ? { acceptAllDevices: true, optionalServices: [NUS_SERVICE] }
+    : { filters: [{ services: [NUS_SERVICE] }] };
+
+  try {
+    const d = await navigator.bluetooth.requestDevice(options);
+    remember(d);
+    renderDeviceList(d.id);
+    setStatus("Added " + (d.name || "device") + " — press Connect");
+  } catch (err) {
+    // A cancelled chooser is a normal outcome, not a failure worth shouting about
+    if (err && err.name === "NotFoundError") return;
+    setStatus("Chooser failed: " + err.message, "error");
+  }
+}
+
+// ── Connection ─────────────────────────────────────────────────────────────
+async function connect() {
+  const d = devices.get(deviceSelect.value);
+  if (!d) return;
+
+  try {
+    btnConnect.disabled = true;
+    deviceSelect.disabled = true;
+    btnAdd.disabled = true;
+    setStatus((d.name || "Device") + " — connecting…", "connecting");
+
+    const server  = await d.gatt.connect();
+    const service = await server.getPrimaryService(NUS_SERVICE);
+    txChar = await service.getCharacteristic(NUS_TX_CHAR);
+
+    await txChar.startNotifications();
+    txChar.addEventListener("characteristicvaluechanged", onNotify);
+
+    active = d;
+    if (window.localStorage) localStorage.setItem(LAST_KEY, d.id);
+
+    setStatus((d.name || "Device") + " — CONNECTED", "connected");
+    btnDisconnect.disabled = false;
+    btnAdd.disabled = false;
+    $("help").style.display = "none";
+  } catch (err) {
+    setStatus("Connect failed: " + err.message, "error");
+    txChar = null;
+    active = null;
+    btnAdd.disabled = false;
+    renderDeviceList();
+  }
+}
+
+function onDisconnected() {
+  setStatus("DISCONNECTED", "error");
+  txChar = null;
+  active = null;
+  lineBuf = "";
+  btnDisconnect.disabled = true;
+  btnAdd.disabled = false;
+  renderDeviceList();
+}
+
+function disconnect() {
+  if (active && active.gatt.connected) active.gatt.disconnect();
+  else onDisconnected();
+}
+
+btnAdd.addEventListener("click", addDevice);
+btnConnect.addEventListener("click", connect);
+btnDisconnect.addEventListener("click", disconnect);
+
+// ── Chart rendering ────────────────────────────────────────────────────────
+const PAD = { l: 46, r: 12, t: 24, b: 10 };
+const SERIES = [
+  { label: "X", color: "#FF5252" },
+  { label: "Y", color: "#448AFF" },
+  { label: "Z", color: "#69F0AE" }
+];
+
+function sizeCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx: ctx, w: w, h: h };
+}
+
+function drawChart(canvas, title, series, limit, decimals) {
+  const s = sizeCanvas(canvas);
+  const ctx = s.ctx;
+  const px = PAD.l, py = PAD.t;
+  const pw = s.w - PAD.l - PAD.r;
+  const ph = s.h - PAD.t - PAD.b;
+  if (pw <= 0 || ph <= 0) return;
+
+  ctx.clearRect(0, 0, s.w, s.h);
+
+  ctx.fillStyle = "#2b2b2b";
+  ctx.fillRect(px, py, pw, ph);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(title, px, py - 8);
+
+  // Horizontal grid and y labels, five ticks
+  const yOf = function (v) { return py + ph / 2 - (v / limit) * (ph / 2); };
+  ctx.strokeStyle = "#444";
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([4, 4]);
+  ctx.fillStyle = "#aaa";
+  ctx.font = "10px Arial";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= 4; i++) {
+    const v = limit - (i * limit) / 2;
+    const y = Math.round(yOf(v)) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(px, y);
+    ctx.lineTo(px + pw, y);
+    ctx.stroke();
+    ctx.fillText(v.toFixed(decimals), px - 6, y);
+  }
+  ctx.setLineDash([]);
+
+  // Traces. x spans the full plot width regardless of how full the buffer is.
+  const n = series[0].length;
+  if (n > 1) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(px, py, pw, ph);
+    ctx.clip();
+    ctx.lineWidth = 1;
+    ctx.lineJoin = "round";
+    for (let k = 0; k < SERIES.length; k++) {
+      const data = series[k];
+      ctx.strokeStyle = SERIES[k].color;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = px + (i / (n - 1)) * pw;
+        const y = yOf(data[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Legend, upper right
+  ctx.font = "10px Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  let lx = px + pw - 84;
+  const ly = py + 12;
+  for (let k = 0; k < SERIES.length; k++) {
+    ctx.strokeStyle = SERIES[k].color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(lx, ly);
+    ctx.lineTo(lx + 14, ly);
+    ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.fillText(SERIES[k].label, lx + 18, ly);
+    lx += 28;
+  }
+
+  ctx.strokeStyle = "#3a3a3a";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+}
+
+// ── Readouts ───────────────────────────────────────────────────────────────
+// Mean of the newest `count` samples of one series
+function tailMean(series, count) {
+  const n = Math.min(count, series.length);
+  if (n === 0) return 0;
+  let sum = 0;
+  for (let i = series.length - n; i < series.length; i++) sum += series[i];
+  return sum / n;
+}
+
+const KEYS = ["ax", "ay", "az", "gx", "gy", "gz"];
+const TILE_IDS = { ax: "vAx", ay: "vAy", az: "vAz", gx: "vGx", gy: "vGy", gz: "vGz" };
+
+function updateTiles(now) {
+  // Rate over a 1 s sliding window; trimmed every frame so it decays promptly
+  // when the stream stops, even though it is only displayed on the slow tick.
+  frameTimes = frameTimes.filter(function (t) { return now - t < 1000; });
+
+  if (!latest) return;
+  if (now - lastTileMs < TILE_MS) return;
+  lastTileMs = now;
+
+  if (!disp) {
+    // Seed straight from the current means so the tiles do not ramp up from 0
+    disp = {};
+    for (let i = 0; i < KEYS.length; i++) disp[KEYS[i]] = tailMean(buf[KEYS[i]], AVG_N);
+    dispHz = frameTimes.length;
+  } else {
+    for (let i = 0; i < KEYS.length; i++) {
+      const k = KEYS[i];
+      disp[k] += TILE_EMA * (tailMean(buf[k], AVG_N) - disp[k]);
+    }
+    dispHz += TILE_EMA * (frameTimes.length - dispHz);
+  }
+
+  for (let i = 0; i < KEYS.length; i++) {
+    const k = KEYS[i];
+    $(TILE_IDS[k]).textContent = disp[k].toFixed(2);
+  }
+  $("vHz").textContent = Math.round(dispHz) + " Hz";
+}
+
+function frame() {
+  const now = performance.now();
+  drawChart($("canvasAccel"), "Accelerometer (g)",
+            [buf.ax, buf.ay, buf.az], ACC_LIM, 1);
+  drawChart($("canvasGyro"), "Gyroscope (deg/s)",
+            [buf.gx, buf.gy, buf.gz], GYR_LIM, 0);
+  updateTiles(now);
+  requestAnimationFrame(frame);
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+if (!navigator.bluetooth) {
+  setStatus("Web Bluetooth unavailable — use Chrome or Edge over localhost/HTTPS", "error");
+  btnAdd.disabled = true;
+}
+renderDeviceList();
+loadKnownDevices().then(function () { renderDeviceList(); });
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
