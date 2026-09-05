@@ -11,11 +11,32 @@ band is a prototype, the classifier has not been trained on real child activity
 data, and several parameters in `spec.md` are named as unvalidated. Two things
 run today: the mock data generator in [`mock/`](mock/), which stands in for the
 bands, and the IMU bring-up rig in
-[`web-imu-data-rx/`](web-imu-data-rx/), which streams a real six-axis IMU off an
-ESP32 and plots it live. Everything between those two ends, the anchors, the
-gateway, the Zone Resolver, the agents and the Safeguard, is specified and not
-yet built. The table in [What is built](#what-is-built) says which is which,
+[`demo-imu-data-dash/`](demo-imu-data-dash/), which streams a real six-axis IMU
+off an ESP32 and plots it live. Everything between those two ends, the anchors,
+the gateway, the Zone Resolver, the agents and the Safeguard, is specified and
+not yet built. The table in [What is built](#what-is-built) says which is which,
 line by line.
+
+---
+
+## Start here
+
+Four files carry the design. Read them in this order and nothing else is needed.
+
+| Read this | For | Time |
+| --- | --- | --- |
+| **This README** | The problem, the architecture, how to run it, and the two maps below | 10 min |
+| [**`CLAUDE.md`**](CLAUDE.md) | System scope, the four-tier split, and the contract for each of the five agents including its *may not* clauses | 10 min |
+| [**`spec.md`**](spec.md) | Inputs, outputs and constraints per tier, the state machines, the parameters, and the failure paths | 15 min |
+| [**`docs/`**](docs/) | [blueprint](docs/blueprint.md), [security](docs/security.md), [RAID log](docs/raid.md), [telemetry pipeline](docs/telemetry-pipeline.md), [schema](docs/telemetry-schema.md), [backup](docs/backup-recovery.md) | as needed |
+
+Two maps in this README answer the two questions people ask first:
+
+- [**How the autonomous agents manage the facility**](#how-the-autonomous-agents-manage-the-facility) — the decision loop, who decides what, and where a human sits in it.
+- [**The simulated IoT data pipeline**](#the-simulated-iot-data-pipeline) — what the generator produces, where it enters the real pipeline, and what it does not simulate.
+
+In a hurry? [Run the simulation](#how-to-run) takes two commands and about
+thirty seconds.
 
 ---
 
@@ -332,6 +353,131 @@ mismatch list are in [`spec.md`](spec.md).
 
 ---
 
+## How the autonomous agents manage the facility
+
+This is the agentic AI OS: five autonomous agents sharing one facility, running
+side by side on one gateway, arbitrated by a deterministic policy engine none of
+them can reach around. Nothing here calls out to a model in a data centre. The
+whole loop closes inside the building, in under a second.
+
+### The decision loop
+
+The system runs the same six-step loop continuously, once per feature window per
+band, all day.
+
+```mermaid
+graph TD
+    subgraph SENSE["1 · SENSE"]
+        BANDS["Bands broadcast<br/>features, strap state, battery"]
+        ANCH["Anchors hear it<br/>and add signal strength"]
+    end
+
+    subgraph GROUND["2 · GROUND, deterministic, no model"]
+        ING["Ingest, stages 1 to 7<br/>verify, resolve, dedupe, decode"]
+        ZONE["Zone Resolver, stage 8<br/>a zone, or unknown, with confidence"]
+        BUS["Message bus, stage 9<br/>field-level contracts enforced here"]
+    end
+
+    subgraph REASON["3 · REASON, the five agents"]
+        AM["Anomaly Monitor<br/>deterministic"]
+        ATT["Attendance Manager<br/>deterministic"]
+        MC["Movement Classifier<br/>model-backed"]
+        DS["Day Summariser<br/>deterministic"]
+        TA["Trend Analyst<br/>model-backed"]
+    end
+
+    SG{"4 · ARBITRATE<br/>SAFEGUARD<br/>veto, and no override path"}
+
+    subgraph ACT["5 · ACT"]
+        CONSOLE["Staff console<br/>ranked worklist, sub-second"]
+        CLOUDOUT["Cloud summary<br/>minimised, once a day"]
+        DROP["Rejected<br/>logged, not surfaced"]
+    end
+
+    CARER["6 · A HUMAN DECIDES<br/>carer acknowledges, dismisses, or escalates"]
+
+    BANDS --> ANCH
+    ANCH --> ING
+    ING --> ZONE
+    ZONE --> BUS
+    BUS --> AM
+    BUS --> ATT
+    BUS --> MC
+    MC --> DS
+    MC --> TA
+    MC -.->|context only, never a precondition| AM
+    AM --> SG
+    ATT --> SG
+    DS --> SG
+    TA --> SG
+    SG -->|approve, urgent| CONSOLE
+    SG -->|approve, routine| CLOUDOUT
+    SG -->|below the floor, or policy| DROP
+    CONSOLE --> CARER
+    CARER -.->|action, not judgement, closes the loop| BUS
+
+    style SG fill:#c1440e,color:#fff
+    style DROP fill:#4a4a4a,color:#fff
+    style CARER fill:#1a6b3a,color:#fff
+```
+
+### What each step is actually doing
+
+| Step | What happens | Autonomy |
+| --- | --- | --- |
+| **1 Sense** | Bands broadcast into the room. Anchors hear whatever is in range and forward it with their own signal strength. Neither decides anything. | None by design |
+| **2 Ground** | The gateway authenticates every advertisement, resolves which band it is, collapses the copies several anchors heard, and turns signal strengths into a zone or into `unknown`. | Deterministic |
+| **3 Reason** | Five agents read the fields their contracts name and each answers one question. They run concurrently and do not call each other. | Autonomous, bounded |
+| **4 Arbitrate** | Every proposal from every agent hits the Safeguard. It approves urgent, approves routine, or rejects. Conflicts resolve by a fixed precedence order. | Deterministic |
+| **5 Act** | Approved output reaches a ranked worklist on the local console, or the daily cloud summary. Rejected output is logged where an auditor can find it. | None, it is routing |
+| **6 A human decides** | A carer acts. The system has taken no physical action and cannot. | The human is the actuator |
+
+### Who decides what, and who never decides
+
+The autonomy in this system is deliberately narrow, and the boundary is the
+point.
+
+**Agents decide what deserves attention.** They classify, reconcile, detect and
+flag. That is real autonomy: no carer asked for any of it, and it happens
+continuously whether or not anyone is looking.
+
+**Agents never decide what happens next.** No agent talks to another agent, no
+agent writes to the console, no agent reaches the cloud. Every output goes to
+the Safeguard and stops there until the Safeguard rules on it. There is no
+message path that skips it, and there is no configuration flag that creates one.
+
+**The system never acts on the world.** There is no lock it can close, no door
+it can open, no alarm it can sound on its own authority. The final actuator is
+always a person walking to a room. This is why zone data is allowed to rank an
+alert but never to trigger one on its own.
+
+**The loop closes on actions, not judgements.** When a carer dismisses an alert,
+what returns to the bus is that it was dismissed, by whom, at what time. No
+agent is retrained by it at run time, and no threshold moves because a busy
+carer cleared a queue. That edge is an audit trail, not a feedback signal.
+
+### Why five, and why this split
+
+Each agent owns one question and reads only the fields its contract names, so
+that a failure in one cannot become a failure in another.
+
+| Agent | The one question it owns | Type |
+| --- | --- | --- |
+| Anomaly Monitor | Does someone need to go and look, right now? | Deterministic |
+| Attendance Manager | Who is here, and do the four sources agree? | Deterministic |
+| Movement Classifier | What is this child doing? | Model-backed |
+| Day Summariser | What did the day amount to? | Deterministic |
+| Trend Analyst | Has this child drifted from their own baseline? | Model-backed |
+
+The two safety-critical agents are the two deterministic ones that read raw
+input directly. Neither sits downstream of the classifier, so a safety event
+never waits on a model and never fails because a model failed. Full contracts,
+including every *may not* clause, are in [`CLAUDE.md`](CLAUDE.md) section 3,
+which also sets out why an agent boundary is the right unit even where the logic
+inside it is a rule.
+
+---
+
 ## The agents
 
 Five agents, all executing on the edge gateway, with a deterministic Safeguard
@@ -426,12 +572,85 @@ deletion request are in
 
 ---
 
-## Running the simulation
+## The simulated IoT data pipeline
 
-`mock/generator.py` simulates N bands across a configurable day and emits
-records that validate against `schema/telemetry.schema.json`. We use it to
-develop the gateway pipeline and to demonstrate the failure paths without
-hardware.
+There is no hardware fleet, so `mock/generator.py` stands in for it. It
+simulates a facility day as virtual bands, and emits the records a real gateway
+would be holding. That is what lets the agents, the schema, and the failure
+paths be developed and demonstrated before a single band exists.
+
+### Where the simulation enters the real pipeline
+
+The honest version of this diagram matters more than a flattering one. The
+generator does not simulate the radio, the anchors, or the ingest stages. It
+emits what the gateway holds **after** stage 7, and joins the real pipeline
+there.
+
+```mermaid
+graph TD
+    subgraph REAL["THE REAL PIPELINE, docs/telemetry-pipeline.md"]
+        direction LR
+        R1["Band<br/>advertises"] --> R2["Anchors<br/>hear, add RSSI"]
+        R2 --> R3["Ingest<br/>stages 1 to 7"]
+        R3 --> R4["Zone Resolver<br/>stage 8"]
+        R4 --> R5["Message bus<br/>stage 9"]
+        R5 --> R6["The five<br/>agents"]
+        R6 --> R7["Safeguard"]
+        R7 --> R8["Console<br/>and cloud"]
+    end
+
+    subgraph GEN["THE SIMULATION, mock/generator.py"]
+        direction LR
+        G1["Seeded<br/>facility day"] --> G2["Per band: clip,<br/>wear motion, activity"]
+        G2 --> G3["Strap and<br/>scenario injection"]
+        G3 --> G4["Band-side buffering,<br/>replayed out of order"]
+        G4 --> G5["Schema validation,<br/>every record"]
+        G5 --> G6["band_windows.jsonl<br/>daily_summaries.jsonl"]
+    end
+
+    G6 ==>|"the generator emits what the gateway holds after stage 7"| R5
+
+    style GEN fill:#1a6b3a,color:#fff
+    style REAL fill:#1b263b,color:#fff
+```
+
+### What the simulation covers, and what it does not
+
+| Pipeline element | Simulated |
+| --- | --- |
+| Band feature windows, and the two-condition attendance rule | **Yes** |
+| Strap events sent unbatched, ahead of the queue | **Yes** |
+| Band-side store and forward, replayed out of order | **Yes** |
+| Schema validation on every record, non-zero exit on failure | **Yes** |
+| Daily summary built from windows, `additionalProperties: false` | **Yes** |
+| Anchor envelopes, several anchors hearing one advertisement | **No** |
+| Tag verification, `adv_id` resolution, cross-anchor dedupe | **No**, signatures use a fixed demo key |
+| Zone resolution, smoothing, hysteresis, calibration | **No** |
+| Safeguard confidence floor | **No**, the floor cannot be set until labelled data exists |
+
+The anchor layer is the largest gap, and it is a known one. The generator was
+written against the earlier point-to-point topology, so it exercises the agents
+and not the ingest path. Generating anchor envelopes with plausible per-anchor
+signal strengths is the prerequisite for testing the Zone Resolver at all, and
+it is logged as question 6.2 in
+[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md). The full version of this table is in
+[`docs/telemetry-pipeline.md`](docs/telemetry-pipeline.md) section 9.
+
+### What one record looks like
+
+Two streams come out. `band_windows.jsonl` is the gateway-side feature window,
+the richest thing in the system and the thing that never leaves the building.
+`daily_summaries.jsonl` is the only payload that goes to the cloud, and the
+schema enforces that with `additionalProperties: false` so a disallowed field is
+rejected structurally rather than by policy. Field-by-field definitions are in
+[`docs/telemetry-schema.md`](docs/telemetry-schema.md), and the machine-readable
+contract is [`schema/telemetry.schema.json`](schema/telemetry.schema.json).
+
+---
+
+## How to run
+
+Python 3.9 or newer, and one dependency.
 
 ```bash
 python -m pip install -r mock/requirements.txt
@@ -439,6 +658,20 @@ python -m pip install -r mock/requirements.txt
 # 12 bands, one day, reproducible
 python mock/generator.py --bands 12 --date 2026-09-03 --seed 42 --out out/
 ```
+
+Expected output, with the path separator your platform uses:
+
+```
+band windows: 10793 records -> out/band_windows.jsonl
+daily summaries: 12 records -> out/daily_summaries.jsonl
+10793 band windows, 12 daily summaries, all valid
+```
+
+That run is deterministic. With `--seed 42` and the same flags you get those
+record counts every time, which matters when the same scenario has to appear
+twice in a demo. `all valid` means every record was checked against
+[`schema/telemetry.schema.json`](schema/telemetry.schema.json) before it was
+written; a single failure exits non-zero and writes nothing further.
 
 Scenario injection, one flag per failure path we need to show:
 
@@ -465,13 +698,13 @@ band drains its buffer, which is what the gateway actually sees.
 ## Hardware bring-up, the IMU dashboard
 
 Before a movement classifier can be trained, the sensor has to be trusted. The
-rig in [`web-imu-data-rx/`](web-imu-data-rx/) is that check: an ESP32-S3 with an
+rig in [`demo-imu-data-dash/`](demo-imu-data-dash/) is that check: an ESP32-S3 with an
 MPU6050 streaming six axes at 100 Hz over BLE, and a single-file browser
 dashboard that plots them live over Web Bluetooth. No backend, no build step, no
 dependencies.
 
 ```
-web-imu-data-rx/
+demo-imu-data-dash/
 ├── index.html                      the dashboard, one file
 ├── start.bat                       serves it and opens Chrome or Edge
 └── sample-imu-data/
@@ -482,7 +715,7 @@ web-imu-data-rx/
 Run it by double-clicking `start.bat`, or by hand:
 
 ```bash
-cd web-imu-data-rx
+cd demo-imu-data-dash
 python -m http.server 8000     # file:// will not work, Web Bluetooth needs a secure context
 ```
 
@@ -497,7 +730,7 @@ numeric tiles are smoothed on a 120 ms refresh, because at 100 Hz raw digits are
 unreadable. Full setup, the LED status codes, the connection flow, and the
 corrections made to the original sketch (unadvertised service UUID, default MTU
 splitting every frame, a connection interval too slow for 100 Hz) are in
-[`web-imu-data-rx/README.md`](web-imu-data-rx/README.md).
+[`demo-imu-data-dash/README.md`](demo-imu-data-dash/README.md).
 
 **What this proves, and what it does not.** It proves the sensor, the sample
 rate, the axis conventions and the frame format, which is what feature
@@ -520,7 +753,7 @@ prose.
 | Interfaces, state machines, parameters, failure paths | Specified | [`spec.md`](spec.md) |
 | Telemetry payload shapes and JSON Schema | Specified, and enforced in code | [`schema/`](schema/), [`docs/telemetry-schema.md`](docs/telemetry-schema.md) |
 | Mock band and scenario generator | **Runs** | [`mock/generator.py`](mock/generator.py) |
-| IMU capture and live plotting over BLE | **Runs**, on an ESP32-S3 and MPU6050 | [`web-imu-data-rx/`](web-imu-data-rx/) |
+| IMU capture and live plotting over BLE | **Runs**, on an ESP32-S3 and MPU6050 | [`demo-imu-data-dash/`](demo-imu-data-dash/) |
 | Band firmware: strap ADC, feature windows, BLE advertising | Not built | designed in [`spec.md`](spec.md) sections 1, 3 and 9 |
 | Strap loop, breakaway clip, enclosure | Concept and render, no built unit | [The band](#the-band) |
 | Anchor firmware and the anchor-to-zone map | Not built | designed in [`spec.md`](spec.md) sections 8 and 10 |
@@ -545,7 +778,7 @@ prose.
 | [`schema/telemetry.schema.json`](schema/telemetry.schema.json) | JSON Schema for both payload types                                                                                                     |
 | [`mock/generator.py`](mock/generator.py)                       | Simulator for bands and scenarios                                                                                                      |
 | [`mock/requirements.txt`](mock/requirements.txt)               | The generator's one dependency, `jsonschema`                                                                                           |
-| [`web-imu-data-rx/`](web-imu-data-rx/)                         | IMU bring-up rig: ESP32 sketch, Web Bluetooth dashboard, and its own README                                                            |
+| [`demo-imu-data-dash/`](demo-imu-data-dash/)                         | IMU bring-up rig: ESP32 sketch, Web Bluetooth dashboard, and its own README                                                            |
 | [`img/`](img/)                                                 | Product render and logos used in this README                                                                                           |
 | [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md)                       | What the design does not yet settle                                                                                                    |
 

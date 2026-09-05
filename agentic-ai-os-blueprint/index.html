@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LetGo Agent OS Blueprint</title>
+<meta name="description" content="The agentic AI OS behind LetGo Band: five autonomous agents, one deterministic policy engine, and the decision loop they run inside a daycare facility.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* ── tokens: complete light palette on bare :root ─────────────── */
+:root {
+  --ground:      #f4f6f8;
+  --surface:     #ffffff;
+  --surface-2:   #eaeef2;
+  --ink:         #0d1b2a;
+  --ink-2:       #46586a;
+  --ink-3:       #6d8096;
+  --rule:        #d5dde5;
+  --rule-strong: #b6c3d0;
+  --accent:      #c1440e;
+  --accent-ink:  #ffffff;
+  --accent-soft: #fbeae2;
+  --safe:        #1a6b3a;
+  --safe-soft:   #e2f0e8;
+  --mute:        #4a4a4a;
+  --mute-soft:   #e8eaec;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --spine: 68ch;
+  --wide:  1220px;
+  --r: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #08111a;
+    --surface:     #0d1b2a;
+    --surface-2:   #13273a;
+    --ink:         #e6edf4;
+    --ink-2:       #9db0c4;
+    --ink-3:       #74899e;
+    --rule:        #1e3348;
+    --rule-strong: #2c4761;
+    --accent:      #f0743c;
+    --accent-ink:  #1a0d06;
+    --accent-soft: #2a1710;
+    --safe:        #4cb377;
+    --safe-soft:   #10261a;
+    --mute:        #8c9aa6;
+    --mute-soft:   #172430;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #08111a;
+  --surface:     #0d1b2a;
+  --surface-2:   #13273a;
+  --ink:         #e6edf4;
+  --ink-2:       #9db0c4;
+  --ink-3:       #74899e;
+  --rule:        #1e3348;
+  --rule-strong: #2c4761;
+  --accent:      #f0743c;
+  --accent-ink:  #1a0d06;
+  --accent-soft: #2a1710;
+  --safe:        #4cb377;
+  --safe-soft:   #10261a;
+  --mute:        #8c9aa6;
+  --mute-soft:   #172430;
+}
+
+/* ── base ─────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.65;
+  font-feature-settings: "kern";
+}
+::selection { background: var(--accent); color: var(--accent-ink); }
+a { color: var(--ink); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+.wrap { max-width: var(--wide); margin: 0 auto; padding: 0 28px; }
+.spine { max-width: var(--spine); }
+
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+p { margin: 0; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+code, .m { font-family: var(--mono); font-size: 0.875em; }
+code {
+  background: var(--surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+}
+
+/* ── masthead ─────────────────────────────────────────────────── */
+.masthead {
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+.masthead .wrap { padding-top: 26px; padding-bottom: 0; }
+.mast-top {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  align-items: baseline; justify-content: space-between;
+  padding-bottom: 30px;
+}
+.mast-id { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.tag {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule-strong);
+  padding: 3px 8px;
+  border-radius: 2px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.tag.hot { border-color: var(--accent); color: var(--accent); }
+.themer {
+  font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.1em;
+  text-transform: uppercase; background: none; color: var(--ink-2);
+  border: 1px solid var(--rule-strong); border-radius: 2px;
+  padding: 5px 10px; cursor: pointer;
+}
+.themer:hover { border-color: var(--accent); color: var(--accent); }
+
+.hero { padding: 54px 0 60px; }
+.hero h1 {
+  font-size: clamp(2.1rem, 5.4vw, 3.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  margin-bottom: 22px;
+  max-width: 17ch;
+}
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lede { font-size: clamp(1.02rem, 1.6vw, 1.18rem); color: var(--ink-2); max-width: 60ch; }
+.hero .lede + .lede { margin-top: 14px; }
+
+/* facts strip */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  border-top: 1px solid var(--rule);
+  border-left: 1px solid var(--rule);
+  margin-top: 46px;
+}
+.fact {
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 16px 18px 18px;
+}
+.fact .n {
+  font-family: var(--mono); font-size: 1.65rem; font-weight: 600;
+  letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  display: block; line-height: 1.1;
+}
+.fact .l { font-size: 0.8125rem; color: var(--ink-2); margin-top: 6px; display: block; line-height: 1.4; }
+.fact.hot .n { color: var(--accent); }
+
+/* ── sections ─────────────────────────────────────────────────── */
+section { padding: 68px 0; border-top: 1px solid var(--rule); }
+section:nth-of-type(even) { background: var(--surface); }
+.sec-head { margin-bottom: 34px; }
+.sec-head h2 {
+  font-size: clamp(1.5rem, 3vw, 2.05rem);
+  line-height: 1.15; margin: 10px 0 0; letter-spacing: -0.025em;
+}
+.sec-head p { color: var(--ink-2); margin-top: 14px; max-width: var(--spine); }
+
+/* ── figures ──────────────────────────────────────────────────── */
+figure { margin: 0 0 30px; }
+.canvas {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 22px;
+}
+section:nth-of-type(even) .canvas { background: var(--ground); }
+.canvas svg { display: block; width: 100%; min-width: 720px; height: auto; }
+figcaption {
+  font-size: 0.8125rem; color: var(--ink-2);
+  margin-top: 12px; max-width: var(--spine); line-height: 1.55;
+}
+
+/* svg helpers */
+.s-box { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1.25; }
+section:nth-of-type(even) .s-box { fill: var(--ground); }
+.s-group { fill: none; stroke: var(--rule); stroke-width: 1.25; stroke-dasharray: 3 4; }
+.s-flow { stroke: var(--ink-3); stroke-width: 1.5; fill: none; }
+.s-loop { stroke: var(--safe); stroke-width: 1.5; fill: none; }
+.s-ctx  { stroke: var(--ink-3); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+.s-hot  { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.s-safe { fill: var(--safe-soft); stroke: var(--safe); stroke-width: 1.25; }
+.s-mute { fill: var(--mute-soft); stroke: var(--rule-strong); stroke-width: 1.25; }
+.t      { fill: var(--ink); font-family: var(--sans); }
+.t-ttl  { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.t-sm   { font-size: 11px; fill: var(--ink-2); }
+.t-num  { font-family: var(--mono); font-size: 11px; font-weight: 600; fill: var(--ink-3); letter-spacing: 0.08em; }
+.t-edge { font-family: var(--mono); font-size: 10px; fill: var(--ink-3); letter-spacing: 0.02em; }
+.t-hot  { fill: var(--accent); }
+.t-safe { fill: var(--safe); }
+
+/* ── loop step table ──────────────────────────────────────────── */
+.steps { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.step {
+  display: grid;
+  grid-template-columns: 46px minmax(140px, 1fr) 2.2fr minmax(120px, 0.9fr);
+  gap: 20px; align-items: start;
+  padding: 16px 0; border-bottom: 1px solid var(--rule);
+}
+.step .sn { font-family: var(--mono); font-size: 0.8125rem; font-weight: 600; color: var(--ink-3); padding-top: 2px; }
+.step .st { font-weight: 600; }
+.step .sd { color: var(--ink-2); font-size: 0.9375rem; }
+.step .sa { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--ink-3); padding-top: 3px; }
+.step.human { background: var(--safe-soft); margin: 0 -14px; padding: 16px 14px; border-radius: var(--r); border-bottom-color: transparent; }
+.step.human .sn, .step.human .sa { color: var(--safe); }
+
+/* ── agent cards ──────────────────────────────────────────────── */
+.agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.agent { background: var(--surface); padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+section:nth-of-type(even) .agent { background: var(--ground); }
+.agent-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.agent h3 { font-size: 1.0625rem; }
+.type {
+  font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 3px 7px; border-radius: 2px; white-space: nowrap;
+}
+.type.det { background: var(--safe-soft); color: var(--safe); }
+.type.mod { background: var(--surface-2); color: var(--ink-2); }
+.owns { font-size: 0.9375rem; color: var(--ink-2); font-style: italic; }
+.io { display: grid; gap: 7px; font-size: 0.8125rem; }
+.io div { display: grid; grid-template-columns: 62px 1fr; gap: 10px; }
+.io dt { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding-top: 3px; }
+.io dd { margin: 0; color: var(--ink-2); }
+.maynot {
+  border-left: 2px solid var(--accent);
+  padding: 8px 0 8px 13px;
+  font-size: 0.8125rem;
+  margin-top: auto;
+}
+.maynot b { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 3px; }
+
+/* ── authority bands ──────────────────────────────────────────── */
+.bands { display: grid; gap: 14px; }
+.band {
+  display: grid; grid-template-columns: minmax(160px, 0.85fr) 2fr;
+  gap: 26px; padding: 22px 24px;
+  border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--surface);
+}
+section:nth-of-type(even) .band { background: var(--ground); }
+.band h3 { font-size: 1.0625rem; margin-bottom: 5px; }
+.band .who { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.band p { color: var(--ink-2); font-size: 0.9375rem; }
+.band.gate { border-color: var(--accent); border-left-width: 3px; }
+.band.gate .who { color: var(--accent); }
+.band.act { border-color: var(--safe); border-left-width: 3px; background: var(--safe-soft); }
+.band.act .who { color: var(--safe); }
+
+.callout {
+  margin-top: 22px; padding: 20px 24px;
+  border: 1px solid var(--rule-strong); border-radius: var(--r);
+  background: var(--surface-2);
+  font-size: 0.9375rem;
+}
+.callout b { color: var(--ink); }
+
+/* ── precedence ladder ────────────────────────────────────────── */
+.ladder { display: grid; gap: 8px; counter-reset: rung; }
+.rung {
+  display: grid; grid-template-columns: 38px 1fr auto; gap: 18px; align-items: center;
+  padding: 15px 20px 15px 16px;
+  border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--surface);
+}
+section:nth-of-type(even) .rung { background: var(--ground); }
+.rung .r { font-family: var(--mono); font-weight: 600; font-size: 1rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.rung .w { font-weight: 500; }
+.rung .w small { display: block; font-weight: 400; font-size: 0.8125rem; color: var(--ink-2); margin-top: 2px; }
+.rung .f { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.06em; color: var(--ink-3); text-align: right; }
+.rung.top { border-color: var(--accent); border-left-width: 3px; background: var(--accent-soft); }
+.rung.top .r, .rung.top .f { color: var(--accent); }
+.rung.bottom { opacity: 0.82; }
+
+/* ── trust hierarchy ──────────────────────────────────────────── */
+.trust { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-top: 30px; }
+.trow { display: grid; grid-template-columns: 40px minmax(130px,0.9fr) minmax(150px,1fr) 1.7fr; gap: 18px; align-items: baseline; padding: 15px 18px; background: var(--surface); }
+section:nth-of-type(even) .trow { background: var(--ground); }
+.trow.head { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); background: var(--surface-2); }
+.trow .rk { font-family: var(--mono); font-weight: 600; color: var(--ink-3); }
+.trow .sg { font-weight: 600; }
+.trow .ch { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-2); }
+.trow .nt { font-size: 0.875rem; color: var(--ink-2); }
+
+.rules { display: grid; gap: 12px; margin-top: 30px; }
+.rule-item { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; font-size: 0.9375rem; color: var(--ink-2); }
+.rule-item b { color: var(--ink); }
+.mark { font-family: var(--mono); font-size: 0.75rem; color: var(--accent); padding-top: 3px; }
+
+/* ── footer ───────────────────────────────────────────────────── */
+footer { border-top: 1px solid var(--rule); padding: 46px 0 60px; background: var(--surface); }
+.reads { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-bottom: 34px; }
+.read { background: var(--surface); padding: 18px 20px; display: block; text-decoration: none; }
+.read:hover { background: var(--surface-2); }
+.read .f { font-family: var(--mono); font-size: 0.875rem; font-weight: 500; }
+.read .d { display: block; font-size: 0.8125rem; color: var(--ink-2); margin-top: 5px; line-height: 1.5; }
+.colophon { font-size: 0.8125rem; color: var(--ink-3); max-width: var(--spine); }
+
+@media (max-width: 720px) {
+  .step { grid-template-columns: 34px 1fr; gap: 6px 14px; }
+  .step .sd, .step .sa { grid-column: 2; }
+  .band { grid-template-columns: 1fr; gap: 10px; }
+  .trow { grid-template-columns: 30px 1fr; gap: 4px 14px; }
+  .trow .ch, .trow .nt { grid-column: 2; }
+  .trow.head { display: none; }
+  .rung { grid-template-columns: 30px 1fr; }
+  .rung .f { grid-column: 2; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-top">
+      <div class="mast-id">
+        <span class="eyebrow">LetGo Band</span>
+        <span class="tag">Deliverable 02</span>
+        <span class="tag">SDG 3 &middot; Good Health and Well-being</span>
+        <span class="tag hot">Tier 1 &middot; runs on the edge gateway</span>
+      </div>
+      <button class="themer" id="themer" type="button" aria-label="Switch colour theme">Theme</button>
+    </div>
+  </div>
+  <div class="wrap hero">
+    <h1>Five agents, one gateway, and <em>no way around the Safeguard</em>.</h1>
+    <p class="lede">This is the agentic AI OS behind LetGo Band. Five autonomous agents share one daycare facility, run side by side on a single edge gateway, and are arbitrated by a deterministic policy engine that none of them can reach around.</p>
+    <p class="lede">Nothing here calls a model in a data centre. The whole loop closes inside the building, in under a second, and it closes on a person.</p>
+
+    <div class="facts">
+      <div class="fact"><span class="n">5</span><span class="l">autonomous agents, all on Tier&nbsp;1</span></div>
+      <div class="fact"><span class="n">3</span><span class="l">deterministic, 2 model-backed</span></div>
+      <div class="fact hot"><span class="n">1</span><span class="l">policy engine, with no override path</span></div>
+      <div class="fact"><span class="n">0</span><span class="l">safety decisions that depend on the cloud</span></div>
+      <div class="fact"><span class="n">&lt;1s</span><span class="l">from strap breach to the staff console</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ 1 · THE DECISION LOOP ═══════════ -->
+<section id="loop">
+  <div class="wrap">
+    <div class="sec-head spine">
+      <span class="eyebrow">01 &middot; The workflow</span>
+      <h2>The decision loop</h2>
+      <p>The system runs the same six-step loop continuously, once per feature window per band, all day. The numbering is the sequence, not decoration: each step can only act on what the step before it produced.</p>
+    </div>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 1160 372" role="img" aria-label="Six-step decision loop: sense, ground, reason, arbitrate, act, and a human decides. A return path carries the carer's action back to the message bus.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-3)"></path>
+            </marker>
+            <marker id="ar-safe" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--safe)"></path>
+            </marker>
+          </defs>
+
+          <!-- 01 SENSE -->
+          <rect class="s-box" x="20" y="60" width="150" height="140" rx="4"></rect>
+          <text class="t t-num" x="36" y="86">01</text>
+          <text class="t t-ttl" x="36" y="110">SENSE</text>
+          <text class="t t-sm" x="36" y="134">Bands broadcast.</text>
+          <text class="t t-sm" x="36" y="150">Anchors hear and</text>
+          <text class="t t-sm" x="36" y="166">add signal strength.</text>
+          <text class="t t-edge" x="36" y="188">no decisions here</text>
+
+          <!-- 02 GROUND -->
+          <rect class="s-box" x="210" y="60" width="150" height="140" rx="4"></rect>
+          <text class="t t-num" x="226" y="86">02</text>
+          <text class="t t-ttl" x="226" y="110">GROUND</text>
+          <text class="t t-sm" x="226" y="134">Verify, resolve,</text>
+          <text class="t t-sm" x="226" y="150">dedupe, decode,</text>
+          <text class="t t-sm" x="226" y="166">zone or unknown.</text>
+          <text class="t t-edge" x="226" y="188">9 stages, deterministic</text>
+
+          <!-- 03 REASON -->
+          <rect class="s-box" x="400" y="60" width="150" height="140" rx="4"></rect>
+          <text class="t t-num" x="416" y="86">03</text>
+          <text class="t t-ttl" x="416" y="110">REASON</text>
+          <text class="t t-sm" x="416" y="134">Five agents each</text>
+          <text class="t t-sm" x="416" y="150">answer one question,</text>
+          <text class="t t-sm" x="416" y="166">concurrently.</text>
+          <text class="t t-edge" x="416" y="188">autonomous, bounded</text>
+
+          <!-- 04 ARBITRATE -->
+          <rect class="s-hot" x="590" y="60" width="150" height="140" rx="4"></rect>
+          <text class="t t-num t-hot" x="606" y="86">04</text>
+          <text class="t t-ttl t-hot" x="606" y="110">ARBITRATE</text>
+          <text class="t t-sm" x="606" y="134">The Safeguard rules</text>
+          <text class="t t-sm" x="606" y="150">on every proposal:</text>
+          <text class="t t-sm" x="606" y="166">urgent, routine, reject.</text>
+          <text class="t t-edge t-hot" x="606" y="188">veto, no override</text>
+
+          <!-- 05 ACT -->
+          <rect class="s-box" x="780" y="60" width="150" height="140" rx="4"></rect>
+          <text class="t t-num" x="796" y="86">05</text>
+          <text class="t t-ttl" x="796" y="110">ACT</text>
+          <text class="t t-sm" x="796" y="134">Ranked worklist,</text>
+          <text class="t t-sm" x="796" y="150">cloud summary,</text>
+          <text class="t t-sm" x="796" y="166">or logged rejection.</text>
+          <text class="t t-edge" x="796" y="188">routing, not deciding</text>
+
+          <!-- 06 HUMAN -->
+          <rect class="s-safe" x="970" y="60" width="150" height="140" rx="4"></rect>
+          <text class="t t-num t-safe" x="986" y="86">06</text>
+          <text class="t t-ttl t-safe" x="986" y="110">A HUMAN</text>
+          <text class="t t-ttl t-safe" x="986" y="128">DECIDES</text>
+          <text class="t t-sm" x="986" y="152">A carer goes and</text>
+          <text class="t t-sm" x="986" y="168">looks. The system</text>
+          <text class="t t-sm" x="986" y="184">has no actuator.</text>
+
+          <!-- flow arrows -->
+          <line class="s-flow" x1="172" y1="130" x2="204" y2="130" marker-end="url(#ar)"></line>
+          <line class="s-flow" x1="362" y1="130" x2="394" y2="130" marker-end="url(#ar)"></line>
+          <line class="s-flow" x1="552" y1="130" x2="584" y2="130" marker-end="url(#ar)"></line>
+          <line class="s-flow" x1="742" y1="130" x2="774" y2="130" marker-end="url(#ar)"></line>
+          <line class="s-flow" x1="932" y1="130" x2="964" y2="130" marker-end="url(#ar)"></line>
+
+          <!-- return path -->
+          <path class="s-loop" d="M 1045 200 V 285 Q 1045 305 1025 305 H 305 Q 285 305 285 285 V 208" marker-end="url(#ar-safe)"></path>
+          <text class="t t-edge t-safe" x="665" y="298" text-anchor="middle">acknowledged &middot; dismissed &middot; escalated &mdash; an action, never a judgement</text>
+          <text class="t t-edge" x="665" y="332" text-anchor="middle">the loop closes on the message bus, and no agent is retrained at run time</text>
+        </svg>
+      </div>
+      <figcaption>The loop closes, but not as a training signal. What returns to the bus is that an alert was acknowledged, by whom, at what time. No threshold moves because a busy carer cleared a queue.</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <div class="sn">01</div><div class="st">Sense</div>
+        <div class="sd">Bands broadcast into the room. Anchors hear whatever is in range and forward it with their own received signal strength. Neither tier decides anything, and neither holds a key.</div>
+        <div class="sa">no autonomy, by design</div>
+      </div>
+      <div class="step">
+        <div class="sn">02</div><div class="st">Ground</div>
+        <div class="sd">The gateway authenticates every advertisement, resolves which band it is, collapses the copies several anchors heard into one observation, and turns the signal strengths into a zone &mdash; or into <code>unknown</code>.</div>
+        <div class="sa">deterministic</div>
+      </div>
+      <div class="step">
+        <div class="sn">03</div><div class="st">Reason</div>
+        <div class="sd">Five agents read only the fields their contracts name and each answers one question. They run concurrently and never call one another.</div>
+        <div class="sa">autonomous, bounded</div>
+      </div>
+      <div class="step">
+        <div class="sn">04</div><div class="st">Arbitrate</div>
+        <div class="sd">Every proposal from every agent reaches the Safeguard. It approves as urgent, approves as routine, or rejects and logs. Conflicts resolve on a fixed precedence order, never ad hoc.</div>
+        <div class="sa">deterministic</div>
+      </div>
+      <div class="step">
+        <div class="sn">05</div><div class="st">Act</div>
+        <div class="sd">Approved output reaches a ranked worklist on the local console, or the once-a-day cloud summary. Rejected output is logged where an auditor can find it, not discarded.</div>
+        <div class="sa">routing only</div>
+      </div>
+      <div class="step human">
+        <div class="sn">06</div><div class="st">A human decides</div>
+        <div class="sd">A carer acts. The system has taken no physical action, and cannot: there is no lock it can close, no door it can open, no alarm it can sound on its own authority.</div>
+        <div class="sa">the human is the actuator</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 2 · AGENT ROLES ═══════════ -->
+<section id="roles">
+  <div class="wrap">
+    <div class="sec-head spine">
+      <span class="eyebrow">02 &middot; Multi-agent roles</span>
+      <h2>What each agent reads, and what it may never do</h2>
+      <p>Each agent owns exactly one question, subscribes to a named set of fields, and publishes one kind of output. The field-level isolation is enforced at the message bus rather than by convention, so an agent reading outside its contract is refused rather than reviewed.</p>
+    </div>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 1320 556" role="img" aria-label="Map of the five agents. The message bus feeds a safety path of two deterministic agents and an activity path built on the movement classifier. All proposals converge on the Safeguard, which issues one of three verdicts.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-3)"></path>
+            </marker>
+            <marker id="ar2h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+
+          <!-- message bus -->
+          <rect class="s-box" x="20" y="60" width="112" height="470" rx="4"></rect>
+          <text class="t t-num" x="76" y="92" text-anchor="middle">STAGE 9</text>
+          <text class="t t-ttl" x="76" y="290" text-anchor="middle">MESSAGE</text>
+          <text class="t t-ttl" x="76" y="308" text-anchor="middle">BUS</text>
+          <text class="t t-sm" x="76" y="336" text-anchor="middle">contracts</text>
+          <text class="t t-sm" x="76" y="352" text-anchor="middle">enforced here</text>
+          <text class="t t-edge" x="76" y="508" text-anchor="middle">no raw RSSI</text>
+
+          <!-- SAFETY PATH group -->
+          <rect class="s-group" x="300" y="60" width="420" height="196" rx="4"></rect>
+          <text class="t t-edge" x="316" y="80">SAFETY PATH &mdash; reads raw input, never waits on a model</text>
+          <rect class="s-box" x="320" y="94" width="380" height="62" rx="3"></rect>
+          <text class="t t-ttl" x="336" y="118">Anomaly Monitor</text>
+          <text class="t t-sm" x="336" y="138">strap breach &middot; signal loss &middot; power-off &middot; stillness</text>
+          <text class="t t-edge t-safe" x="684" y="118" text-anchor="end">DETERMINISTIC</text>
+          <rect class="s-box" x="320" y="172" width="380" height="62" rx="3"></rect>
+          <text class="t t-ttl" x="336" y="196">Attendance Manager</text>
+          <text class="t t-sm" x="336" y="216">clip + motion + coverage + roster &middot; perimeter crossing</text>
+          <text class="t t-edge t-safe" x="684" y="196" text-anchor="end">DETERMINISTIC</text>
+
+          <!-- ACTIVITY PATH group -->
+          <rect class="s-group" x="300" y="300" width="420" height="230" rx="4"></rect>
+          <text class="t t-edge" x="316" y="320">ACTIVITY PATH &mdash; the classification chain</text>
+          <rect class="s-box" x="320" y="334" width="380" height="62" rx="3"></rect>
+          <text class="t t-ttl" x="336" y="358">Movement Classifier</text>
+          <text class="t t-sm" x="336" y="378">activity type, with a confidence score</text>
+          <text class="t t-edge" x="684" y="358" text-anchor="end">MODEL-BACKED</text>
+          <rect class="s-box" x="320" y="440" width="180" height="72" rx="3"></rect>
+          <text class="t t-ttl" x="336" y="464">Day Summariser</text>
+          <text class="t t-sm" x="336" y="484">active minutes,</text>
+          <text class="t t-sm" x="336" y="500">movement variety</text>
+          <rect class="s-box" x="520" y="440" width="180" height="72" rx="3"></rect>
+          <text class="t t-ttl" x="536" y="464">Trend Analyst</text>
+          <text class="t t-sm" x="536" y="484">deviation from that</text>
+          <text class="t t-sm" x="536" y="500">child&rsquo;s own baseline</text>
+
+          <!-- bus to agents -->
+          <line class="s-flow" x1="134" y1="125" x2="294" y2="125" marker-end="url(#ar2)"></line>
+          <text class="t t-edge" x="214" y="117" text-anchor="middle">strap &middot; link &middot; motion</text>
+          <text class="t t-edge" x="214" y="141" text-anchor="middle">anchor coverage</text>
+
+          <line class="s-flow" x1="134" y1="203" x2="294" y2="203" marker-end="url(#ar2)"></line>
+          <text class="t t-edge" x="214" y="195" text-anchor="middle">clip &middot; motion &middot; roster</text>
+          <text class="t t-edge" x="214" y="219" text-anchor="middle">anchor coverage</text>
+
+          <line class="s-flow" x1="134" y1="365" x2="294" y2="365" marker-end="url(#ar2)"></line>
+          <text class="t t-edge" x="214" y="357" text-anchor="middle">feature windows</text>
+
+          <!-- classifier to summariser / trend -->
+          <path class="s-flow" d="M 410 398 V 434" marker-end="url(#ar2)"></path>
+          <path class="s-flow" d="M 610 398 V 434" marker-end="url(#ar2)"></path>
+
+          <!-- context-only edge -->
+          <path class="s-ctx" d="M 510 300 V 262" marker-end="url(#ar2)"></path>
+          <text class="t t-edge" x="524" y="286">context only &mdash; never a precondition</text>
+
+          <!-- groups to safeguard -->
+          <path class="s-flow" d="M 722 158 H 790 Q 810 158 810 178 V 260 Q 810 280 830 280 H 844" marker-end="url(#ar2)"></path>
+          <text class="t t-edge" x="736" y="134">strap breach &middot; perimeter crossing</text>
+          <text class="t t-edge" x="736" y="150">signal loss &middot; attendance state</text>
+          <path class="s-flow" d="M 722 470 H 790 Q 810 470 810 450 V 370 Q 810 350 830 350 H 844" marker-end="url(#ar2)"></path>
+          <text class="t t-edge" x="736" y="492">day summary &middot; trend flags</text>
+
+          <!-- safeguard -->
+          <rect class="s-hot" x="850" y="230" width="170" height="170" rx="4"></rect>
+          <text class="t t-ttl t-hot" x="935" y="286" text-anchor="middle">SAFEGUARD</text>
+          <text class="t t-sm" x="935" y="310" text-anchor="middle">deterministic</text>
+          <text class="t t-sm" x="935" y="326" text-anchor="middle">policy engine</text>
+          <text class="t t-edge t-hot" x="935" y="356" text-anchor="middle">VETO</text>
+          <text class="t t-edge t-hot" x="935" y="372" text-anchor="middle">NO OVERRIDE PATH</text>
+
+          <!-- verdicts -->
+          <path class="s-flow" d="M 1022 254 H 1074" marker-end="url(#ar2)"></path>
+          <text class="t t-edge t-hot" x="1048" y="246" text-anchor="middle">urgent</text>
+          <path class="s-flow" d="M 1022 326 H 1074" marker-end="url(#ar2)"></path>
+          <text class="t t-edge" x="1048" y="318" text-anchor="middle">routine</text>
+          <path class="s-flow" d="M 1022 398 H 1074" marker-end="url(#ar2)"></path>
+          <text class="t t-edge" x="1048" y="390" text-anchor="middle">reject</text>
+
+          <rect class="s-safe" x="1080" y="222" width="220" height="64" rx="3"></rect>
+          <text class="t t-ttl t-safe" x="1096" y="248">Staff console</text>
+          <text class="t t-sm" x="1096" y="268">ranked worklist &middot; sub-second</text>
+
+          <rect class="s-box" x="1080" y="294" width="220" height="64" rx="3"></rect>
+          <text class="t t-ttl" x="1096" y="320">Cloud summary</text>
+          <text class="t t-sm" x="1096" y="340">minimised &middot; once a day</text>
+
+          <rect class="s-mute" x="1080" y="366" width="220" height="64" rx="3"></rect>
+          <text class="t t-ttl" x="1096" y="392">Rejected</text>
+          <text class="t t-sm" x="1096" y="412">logged, and not surfaced</text>
+        </svg>
+      </div>
+      <figcaption>The two safety-critical agents are the two deterministic ones, and neither sits downstream of the classifier. A safety event therefore never waits on a model, and never fails because a model failed. Note also that no arrow leaves an agent for the console or the cloud: the Safeguard is not a filter on one path, it is the only path.</figcaption>
+    </figure>
+
+    <div class="agents">
+      <article class="agent">
+        <div class="agent-top"><h3>Anomaly Monitor</h3><span class="type det">Deterministic</span></div>
+        <p class="owns">&ldquo;Does someone need to go and look, right now?&rdquo;</p>
+        <dl class="io">
+          <div><dt>Reads</dt><dd>Strap events, link state, motion, anchor coverage</dd></div>
+          <div><dt>Emits</dt><dd>Graded anomaly events: strap breach, signal loss after check-in, early power-off, prolonged stillness inconsistent with wear</dd></div>
+        </dl>
+        <div class="maynot"><b>May not</b>Suppress a strap breach event under any circumstance. Breaches always escalate. It may not raise or withhold a safety escalation on zone confidence alone.</div>
+      </article>
+
+      <article class="agent">
+        <div class="agent-top"><h3>Attendance Manager</h3><span class="type det">Deterministic</span></div>
+        <p class="owns">&ldquo;Who is here, and do the four sources agree?&rdquo;</p>
+        <dl class="io">
+          <div><dt>Reads</dt><dd>Clip events, motion confirmation, presence via anchor coverage, the daily roster</dd></div>
+          <div><dt>Emits</dt><dd>Attendance state transitions including perimeter crossing, and the mismatches between the four sources</dd></div>
+        </dl>
+        <div class="maynot"><b>May not</b>Mark a child present on clip state alone. A band clipped around a chair leg closes the same circuit.</div>
+      </article>
+
+      <article class="agent">
+        <div class="agent-top"><h3>Movement Classifier</h3><span class="type mod">Model-backed</span></div>
+        <p class="owns">&ldquo;What is this child doing?&rdquo;</p>
+        <dl class="io">
+          <div><dt>Reads</dt><dd>Feature windows: mean acceleration magnitude, variance, step count, cadence, posture estimate</dd></div>
+          <div><dt>Emits</dt><dd>Activity classifications with confidence scores</dd></div>
+        </dl>
+        <div class="maynot"><b>May not</b>Interpret clinically, make recommendations, or output anything about a child&rsquo;s development.</div>
+      </article>
+
+      <article class="agent">
+        <div class="agent-top"><h3>Day Summariser</h3><span class="type det">Deterministic</span></div>
+        <p class="owns">&ldquo;What did the day amount to?&rdquo;</p>
+        <dl class="io">
+          <div><dt>Reads</dt><dd>Classifications across a session, and the zone assignments they happened in</dd></div>
+          <div><dt>Emits</dt><dd>Active minutes, movement variety across activity classes and zones, fitness session participation</dd></div>
+        </dl>
+        <div class="maynot"><b>May not</b>Produce calorie, weight, body composition, or fitness-scoring output. Never compares one child to another.</div>
+      </article>
+
+      <article class="agent">
+        <div class="agent-top"><h3>Trend Analyst</h3><span class="type mod">Model-backed</span></div>
+        <p class="owns">&ldquo;Has this child drifted from their own baseline?&rdquo;</p>
+        <dl class="io">
+          <div><dt>Reads</dt><dd>Multi-day summaries, and per-day zone occupancy for that child</dd></div>
+          <div><dt>Emits</dt><dd>Activity pattern deviation flags, including zone preference deviation over weeks</dd></div>
+        </dl>
+        <div class="maynot"><b>May not</b>Produce a conclusion, diagnosis, or characterisation of a child. Output is a flag for staff review only, never surfaced to parents unreviewed.</div>
+      </article>
+
+      <article class="agent" style="justify-content:flex-start">
+        <div class="agent-top"><h3>Why an agent, not a rule?</h3></div>
+        <p class="owns" style="font-style:normal">Three of the five are deterministic. So why call them agents at all?</p>
+        <dl class="io">
+          <div><dt>Because</dt><dd>The agent boundary is a <b>contract</b> boundary, not a claim about how clever the thing inside is.</dd></div>
+          <div><dt>It buys</dt><dd>Field-level isolation &mdash; the Day Summariser cannot read strap state, so no summary bug can suppress a breach.</dd></div>
+          <div><dt>And</dt><dd>Independent failure, and a <em>may not</em> clause with a named owner, which is a test somebody can write.</dd></div>
+        </dl>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 3 · AUTONOMY BOUNDARY ═══════════ -->
+<section id="autonomy">
+  <div class="wrap">
+    <div class="sec-head spine">
+      <span class="eyebrow">03 &middot; How the agents manage the facility</span>
+      <h2>The autonomy is deliberately narrow, and the boundary is the point</h2>
+      <p>Three layers of authority, and each one can only do the thing named on it. Read downward: the further you go, the more consequential the decision and the less of it belongs to software.</p>
+    </div>
+
+    <div class="bands">
+      <div class="band">
+        <div><span class="who">Layer 1 &middot; The agents</span><h3>Decide what deserves attention</h3></div>
+        <p>They classify, reconcile, detect and flag, continuously, whether or not anyone is looking. No carer asked for any of it. That is the real autonomy in this system &mdash; and it is the whole of it.</p>
+      </div>
+      <div class="band gate">
+        <div><span class="who">Layer 2 &middot; The Safeguard</span><h3>Decides what reaches a person</h3></div>
+        <p>No agent talks to another agent, writes to the console, or reaches the cloud. Every output goes to the Safeguard and stops there until it rules. There is no message path that skips it, no configuration flag that creates one, and no staff role that can bypass it. If a future feature needs an exception, the rule changes and the change is reviewed.</p>
+      </div>
+      <div class="band act">
+        <div><span class="who">Layer 3 &middot; A person</span><h3>Decides what happens</h3></div>
+        <p>The final actuator is always a carer walking to a room. The system has no lock it can close, no door it can open, and no alarm it can sound on its own authority. This is why zone data is allowed to rank an alert but never to trigger one by itself.</p>
+      </div>
+    </div>
+
+    <div class="callout spine">
+      <b>Carers can silence, dismiss, or escalate an alert the Safeguard has already approved.</b> That is a human action on an approved alert, it is logged, and the alert is not deleted. It does not override the Safeguard, and it does not retrain anything.
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 4 · CONFLICT ═══════════ -->
+<section id="precedence">
+  <div class="wrap">
+    <div class="sec-head spine">
+      <span class="eyebrow">04 &middot; Decision-making under conflict</span>
+      <h2>When two agents want the same carer at once</h2>
+      <p>Safety outranks summary, always. When agent outputs disagree, or several want attention simultaneously, the Safeguard applies this order &mdash; highest first, and fixed in advance rather than negotiated at run time.</p>
+    </div>
+
+    <div class="ladder">
+      <div class="rung top">
+        <div class="r">1</div>
+        <div class="w">Strap breach, and unaccompanied perimeter crossing
+          <small>When both fire for the same child, the breach shows first &mdash; it is deterministic, and the crossing is probabilistic.</small></div>
+        <div class="f">bypasses batching</div>
+      </div>
+      <div class="rung">
+        <div class="r">2</div>
+        <div class="w">Other safety anomalies
+          <small>Signal loss after check-in, early device power-off, prolonged stillness inconsistent with wear, battery critical.</small></div>
+        <div class="f">urgent</div>
+      </div>
+      <div class="rung">
+        <div class="r">3</div>
+        <div class="w">Attendance state and reconciliation mismatches
+          <small>Including a clip that never confirmed with wear-consistent motion.</small></div>
+        <div class="f">urgent</div>
+      </div>
+      <div class="rung bottom">
+        <div class="r">4</div>
+        <div class="w">Day summary output
+          <small>The only class that routinely leaves the building.</small></div>
+        <div class="f">routine</div>
+      </div>
+      <div class="rung bottom">
+        <div class="r">5</div>
+        <div class="w">Trend flags
+          <small>Queued for staff review. Never escalated as an alert, never surfaced to a parent unreviewed.</small></div>
+        <div class="f">queued</div>
+      </div>
+    </div>
+
+    <div class="rules spine">
+      <div class="rule-item"><span class="mark">&#9656;</span><div><b>Attendance never wins over safety.</b> A child recorded as <code>CHECKED_OUT</code> whose band reports a strap breach still generates the breach.</div></div>
+      <div class="rule-item"><span class="mark">&#9656;</span><div><b>The classifier never gates a safety event.</b> Anomaly Monitor conclusions that rest on strap state or link state stand on their own, whatever the Movement Classifier says or fails to say.</div></div>
+      <div class="rule-item"><span class="mark">&#9656;</span><div><b>Zone never stands alone.</b> A perimeter crossing alert carries the evidence it was raised on &mdash; last strap state, last motion, which anchors last heard the band &mdash; and its confidence value. An alert that cannot carry that evidence is still raised, and marked uncorroborated.</div></div>
+      <div class="rule-item"><span class="mark">&#9656;</span><div><b>Below the confidence floor, the Safeguard suppresses and logs.</b> It does not guess, and it does not surface a hedged result. The system fails to <code>unknown</code> rather than to a plausible answer.</div></div>
+    </div>
+
+    <div class="sec-head spine" style="margin-top:60px">
+      <span class="eyebrow">The signal trust hierarchy</span>
+      <h2>Not every signal is worth the same</h2>
+      <p>The three signals this system runs on are not equally trustworthy, and the Safeguard ranks them explicitly rather than treating any reading as a fact.</p>
+    </div>
+
+    <div class="trust">
+      <div class="trow head"><div>Rank</div><div>Signal</div><div>Character</div><div>What it may do</div></div>
+      <div class="trow">
+        <div class="rk">1</div><div class="sg">Strap circuit</div>
+        <div class="ch">deterministic</div>
+        <div class="nt">A closed circuit is measured, not inferred. It is the authority on wear, and no classifier output can contradict it.</div>
+      </div>
+      <div class="trow">
+        <div class="rk">2</div><div class="sg">Motion</div>
+        <div class="ch">reliable</div>
+        <div class="nt">Derived from the IMU, and wrong only when the classifier is wrong. It is the second of the two conditions attendance requires.</div>
+      </div>
+      <div class="trow">
+        <div class="rk">3</div><div class="sg">Signal strength and zone</div>
+        <div class="ch">probabilistic</div>
+        <div class="nt">A room full of moving children is a moving radio environment. Zone may enrich, rank, or route an alert. It may never be the sole basis for a safety-critical decision.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+  <div class="wrap">
+    <span class="eyebrow">Where this is specified</span>
+    <div class="reads" style="margin-top:16px">
+      <a class="read" href="../CLAUDE.md"><span class="f">CLAUDE.md</span><span class="d">System scope, the four-tier split, and the full contract for each agent including every <em>may not</em> clause</span></a>
+      <a class="read" href="../spec.md"><span class="f">spec.md</span><span class="d">Inputs, outputs and constraints per tier, the state machines, parameters, and failure paths</span></a>
+      <a class="read" href="../docs/blueprint.md"><span class="f">docs/blueprint.md</span><span class="d">Orchestration graph, the failure path table, and an end-to-end walkthrough</span></a>
+      <a class="read" href="../README.md"><span class="f">README.md</span><span class="d">The problem, the architecture, how to run the simulation, and the IoT pipeline map</span></a>
+    </div>
+    <p class="colophon">LetGo Band &mdash; an edge-first IoT and multi-agent ecosystem for daycare safety and child activity monitoring. IEEE Computer Society R10 Summer School 2026, Mini Ideathon. SDG 3, Good Health and Well-being. This is a design and a simulation: nothing described here is deployed, and the table in the README says which parts run today, line by line.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var btn = document.getElementById("themer");
+  var root = document.documentElement;
+  btn.addEventListener("click", function () {
+    var now = root.getAttribute("data-theme");
+    if (!now) {
+      var darkNow = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      now = darkNow ? "dark" : "light";
+    }
+    root.setAttribute("data-theme", now === "dark" ? "light" : "dark");
+  });
+})();
+</script>
+
+</body>
+</html>

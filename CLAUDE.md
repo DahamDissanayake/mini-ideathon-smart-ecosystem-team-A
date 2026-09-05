@@ -9,7 +9,7 @@ SDG 3 track (Good Health and Well-being).
 
 ---
 
-## 1. What the system is
+## 1. System scope
 
 LetGo Band is a child-worn activity band with a tamper-evident strap. The band
 broadcasts, it does not connect. Mains-powered scanner anchors placed one per
@@ -18,8 +18,21 @@ runs the entire agent workflow locally. The system automates daycare
 attendance, detects safety anomalies in seconds, resolves which zone a child is
 in, and produces a daily activity record for parents.
 
-The scope is one facility per gateway, with a cloud tier that serves parents and
-multi-site administration only.
+The unit of deployment is one facility per gateway. The cloud tier serves
+parents and multi-site administration, and nothing else.
+
+**The scope boundary in one sentence:** the system observes, decides what a
+human should look at, and tells that human. It does not diagnose, it does not
+score, and it takes no physical action of its own.
+
+Three questions fix the boundary, and the answer to each is the same for every
+feature we add:
+
+| Question | Answer |
+|---|---|
+| Who acts on the output? | Always a person. The system ranks and routes; a carer decides and acts. |
+| What leaves the building? | One minimised daily summary per child per day. No raw motion, no zone data, ever. |
+| What happens when we are not sure? | We say `unknown`. The system fails to no answer rather than to a plausible one. |
 
 ### In scope
 
@@ -108,10 +121,42 @@ the internet fails, the facility loses the parent portal and loses nothing else.
 
 ---
 
-## 3. The five agents
+## 3. Agent roles, the five agents
 
-All five execute on the edge gateway (Tier 1). Each reads only the fields its
-contract names, enforced at the message bus rather than by convention.
+LetGo Band is an agentic AI OS. Five autonomous agents share one facility, run
+side by side on one gateway, and are arbitrated by a deterministic policy engine
+that none of them can reach around. All five execute on the edge gateway
+(Tier 1). Each reads only the fields its contract names, enforced at the message
+bus rather than by convention.
+
+Each agent below is specified as a role, not as a module: what question it owns,
+what it is allowed to read, what it emits, whether it reasons with a model or
+with rules, and what it may never do.
+
+### Why an agent and not a rule
+
+Three of the five agents are deterministic, which invites a fair question. If
+the logic inside is a rule, why call it an agent at all?
+
+Because the agent boundary is a contract boundary, and not a claim about how
+clever the thing inside is. Each agent owns exactly one question, subscribes to
+a named set of fields, and publishes one kind of output. That boundary buys
+three properties a single monolithic rule engine does not have:
+
+- **Field-level isolation.** The Day Summariser cannot read strap state at all,
+  so no bug in summarisation can suppress a breach. The message bus enforces
+  this, rather than a code review catching it.
+- **Independent failure.** The Movement Classifier can be wrong, or silent, and
+  the Anomaly Monitor still escalates, because it reads classifier output only
+  as context and never as a precondition.
+- **Contracts with an owner.** "The system may not diagnose" is a slogan. "The
+  Trend Analyst may not produce a conclusion" is a clause attached to a named
+  component, and it is a test somebody can write.
+
+Model-backed where the judgement is genuinely uncertain, deterministic where a
+wrong answer is a safety event. That split is the design and not a compromise:
+a learned model is the right tool for "is this child walking or running", and
+the wrong tool for "did the strap open".
 
 The *May not* clauses below are the safety contract. They are binding on
 implementation, and they are the reason a reviewer can trust the output.

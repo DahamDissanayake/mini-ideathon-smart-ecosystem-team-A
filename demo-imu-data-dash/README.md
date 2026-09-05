@@ -5,7 +5,7 @@ A single-file browser dashboard that reads a six-axis IMU stream from an ESP32 o
 no dependencies.
 
 ```
-web-imu-data-rx/
+demo-imu-data-dash/
 ├── index.html                        the dashboard
 ├── start.bat                         serves it and opens a browser
 ├── README.md
@@ -23,7 +23,7 @@ close that window to stop it.
 Or by hand:
 
 ```bash
-cd web-imu-data-rx
+cd demo-imu-data-dash
 python -m http.server 8000
 ```
 

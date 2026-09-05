@@ -115,6 +115,40 @@ system.
     `docs/telemetry-schema.md` is the gateway-side representation after
     decoding, and it is not what travels through the air.
 
+### Which tier each constraint binds
+
+A constraint is only enforceable if it is obvious who has to honour it. Read
+this against the inputs and outputs in section 1: that table says what each tier
+handles, and this one says what each tier is forbidden to do with it.
+
+| # | Constraint, in short | Band | Anchor | Gateway | Cloud |
+|---|---|:---:|:---:|:---:|:---:|
+| 1 | All agents execute on the gateway | ● | ● | ● | ● |
+| 2 | Raw IMU never leaves the facility | ● | | ● | ● |
+| 3 | No safety decision depends on the cloud | | | ● | ● |
+| 4 | No external buttons, no over-the-air provisioning | ● | | | |
+| 5 | The strap circuit is the authority on wear | ● | | ● | |
+| 6 | A strap breach is never suppressed | ● | | ● | |
+| 7 | Below the confidence floor, suppress and log | | | ● | |
+| 8 | The Safeguard has no override path | | | ● | |
+| 9 | Cloud ingest rejects disallowed fields | | | ● | ● |
+| 10 | Per-carer performance data is not generated | | | ● | ● |
+| 11 | The band never associates in the field | ● | | | |
+| 12 | The band holds no network credentials | ● | | | |
+| 13 | Anchors hold no band keys and assign no zones | | ● | ● | |
+| 14 | Zone data never stands alone | | | ● | |
+| 15 | The over-the-air payload is compact binary | ● | ● | ● | |
+
+Two readings of this table are worth stating.
+
+**Constraint 1 binds every tier, including the two that do nothing.** It is a
+constraint on the band and the cloud precisely because it forbids them from
+running agent logic they might otherwise be a convenient place for.
+
+**The band column is mostly about what the band does not have.** No buttons, no
+credentials, no association, no raw sample egress. A tier that holds nothing
+cannot leak anything, and that is the cheapest security control in the system.
+
 ---
 
 ## 3. The strap state machine
